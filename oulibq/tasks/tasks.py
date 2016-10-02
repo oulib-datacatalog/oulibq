@@ -1,14 +1,16 @@
 from celery.task import task
+from celery import states
+from celery.exceptions import Ignore
 #from dockertask import docker_task
 from subprocess import call,STDOUT
 #import requests
 import os, hashlib,bagit
 from pymongo import MongoClient
-import boto3
+import boto3,shutil
 from pandas import read_csv
 #Default base directory 
 #basedir="/data/static/"
-
+mounts_hostname = "dev-mstacy"
 
 #Example task
 @task()
@@ -21,44 +23,97 @@ def add(x, y):
     return result
 
 @task()
-def digilab_inventory(nas_bagit='/mnt/nas/bagit2',norfile_bagit='/mnt/norfile/UL-BAGIT',s3_bucket='ul-bagit',mongo_host='oulib_mongo'):
+def digilab_inventory(project='original_bags',department='DigiLab',nas_bagit='/mnt/nas/bagit2',norfile_bagit='/mnt/norfile/UL-BAGIT',s3_bucket='ul-bagit',mongo_host='oulib_mongo'):
     """
     
     """
     #catalog
-    #db=MongoClient(mongo_host)
-    #s3 client
-    s3 = boto3.client('s3')#,aws_access_key_id=ACCESS_KEY, aws_secret_access_key=SECRET_KEY)
-    bagits=[name for name in os.listdir(norfile_bagit) if os.path.isdir(name)]
+    db=MongoClient(mongo_host)
+    #get list of bags from norfile 
+    bagits=[name for name in os.listdir(norfile_bagit) if os.path.isdir("{0}/{1}".format(norfile_bagit,name))]
     vailid_bags=[]
     for itm in bagits:
         if os.path.isfile("{0}/{1}/bagit.txt".format(norfile_bagit,itm)):
              valid_bags.append(itm)
     for bag in valid_bags:
-        manifest = "{0}/{1}/manifest-md5.txt".format(norfile_bagit,bag)
-        data=read_csv(manifest,sep=" ",usecols=[0,2],names=['md5','filename'],header=None,)
-        varified_files=[]
-        catalog_template={'project':'','department':'Digilab', 'bag':bag,'manifest':manifest,'s3_bucket':s3_bucket,'s3':{'state':'present','verified':[],'error':[]},
-                        'norfile':{'location':'UL-BAGIT','validate':''},'nas':{'state':'exists','location':''}}
-        for index, row in data.iterrows():
-            bucket_key ="{0}/{1}".format(bag,row.filename)
-            try:
-                etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
-                if calculate_multipart_etag("{0}/{1}/{2}".format(norfile_bagit,bag,row.filename),etag) or etag==row.md5:
-                    catalog_template['s3']['verified'].append(bucket_key)
-                else:
-                    catalog_template['s3']['error'].append(bucket_key)
-            except:
-                
-        norbag=bagit.Bag('{0}/{1}'.format(norfile_bagit,bag))
-        if norbag.is_valid():
-            catalog_template['norfile']['validate']='Valid'
+        if db.catalog.bagit_inventory.find({'bag':bag}).count()>0:
+            inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag})
         else:
-            catalog_template['norfile']['validate']='Not Valid'
-        print catalog_template
-        
-#return bagits
+            #new item to inventory
+            inventory_metadata={'project':project,'department':department, 'bag':bag,'s3_bucket':s3_bucket,
+                                's3':{'state':'','manifest':'','verified':[],'error':[]},
+                                'norfile':{'location':'UL-BAGIT','valid':''},'nas':{'state':'exists','location':''}}
+                
+        inventory_metadata['norfile']['valid']=validate_local_bag(bag,norfile_bagit)
+        inventory_metadata['s3']=validate_s3_files(bag,norfile_bagit,s3_bucket)
+        #save inventory metadata
+        db.catalog.bagit_inventory.save(inventory_metadata)
+        #print inventory_metadata
+    return "SUCCESS"
+
+@task()
+def validate_s3_files(bag_name,local_source_path,s3_bucket,metadata={'state':'','manifest':'','verified':[],'error':[]}):
+    s3 = boto3.client('s3')
+    s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=bag_name,MaxKeys=1)
+    if 'Contents' in s3_key:
+        metadata['state']='Present'
+        manifest = "{0}/{1}/manifest-md5.txt".format(local_source_path,bag_name)
+        metadata['manifest']=manifest
+        data=read_csv(manifest,sep=" ",usecols=[0,2],names=['md5','filename'],header=None,)
+        for index, row in data.iterrows():
+            bucket_key ="{0}/{1}".format(bag_name,row.filename)
+            etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
+            if calculate_multipart_etag("{0}/{1}".format(local_source_path,bucket_key),etag) or etag=row.md5:
+                metadata['verified'].append(bucket_key)
+            else:
+                metadata['error'].append(bucket_key)
+    else:
+        metadata['state']='Not Present'
+    return metadata
     
+@task()
+def validate_local_bag(bag_name,local_source_path):
+    bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
+    return bag.is_valid()
+
+@task(bind=True)
+def copy_bag(self,bag_name,source_path,dest_path):
+    dest="{0}/{1}".format(dest_path,bag_name)
+    source = "{0}/{1}".format(source_path,bag_name)
+    if os.path.isdir(dest):
+        msg = "Bag destination already exists. Host:{0} Destination: {1}".format(mounts_hostname,dest)
+        self.update_state(state=states.FAILURE,meta=msg)
+        raise Ignore()
+        #return "Bag destination already exists. Host:{0} Destination: {1}".format(mounts_hostname,dest)
+    if not os.path.isdir(source):
+        msg="Bag source directory does not exist. {0}".format(source)
+        self.update_state(state=states.FAILURE,meta=msg)
+        raise Ignore()
+    shutil.copytree(source, dest)
+    return "Bag copied from {0} to {1}".format(source,dest)
+
+@task(bind=True)
+def upload_bag_s3(self,bag_name,source_path,s3_bucket='ul-bagit'):
+    """
+    AWS CLI tool must be installed and aws keys setup
+    """
+    task_id = str(teco_spruce_simulation.request.id)
+    source ="{0}/{1}".format(source_path,bag_name)
+    s3_loc = "s3://{0}/{1}".format(s3_bucket,bag_name)
+    log=open("{0}.tmp".format(task_id),"w+")
+    status=call(['aws','s3','sync',source,s3_loc],stderr=log) 
+    if status != 0:
+        log.seek(0)
+        msg= log.read()
+        log.close()
+        os.remove("{0}.tmp".format(task_id))
+        self.update_state(state=states.FAILURE,meta=msg)
+        raise Ignore()
+    else:
+        msg="Bag uploaded from {0} to {1}".format(source,s3_loc)
+        
+    return msg
+  
 def calculate_multipart_etag(source_path, chunk_size=8, expected=None):
 
     """
