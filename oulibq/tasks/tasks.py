@@ -34,7 +34,7 @@ def digilab_inventory(bags=None,project='original_bags',department='DigiLab',nas
         bagits=bags.split(',')
     else: 
         bagits=[name for name in os.listdir(norfile_bagit) if os.path.isdir("{0}/{1}".format(norfile_bagit,name))]
-    vailid_bags=[]
+    valid_bags=[]
     for itm in bagits:
         if os.path.isfile("{0}/{1}/bagit.txt".format(norfile_bagit,itm)):
             valid_bags.append(itm)
@@ -100,7 +100,7 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,mongo_host):
         for index, row in data.iterrows():
             bucket_key ="{0}/{1}".format(bag_name,row.filename)
             etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
-            if calculate_multipart_etag("{0}/{1}".format(local_source_path,bucket_key),etag) or etag=row.md5:
+            if calculate_multipart_etag("{0}/{1}".format(local_source_path,bucket_key),etag) or etag==row.md5:
                 metadata['verified'].append(bucket_key)
             else:
                 metadata['error'].append(bucket_key)
