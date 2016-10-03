@@ -60,11 +60,11 @@ def digilab_inventory(bags=None,project='original_bags',department='DigiLab',nas
         #s3
         subtasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,mongo_host)))
         #nas
-        subtasks.append(validate_nas_files(args=(bag,nas_bagit,mongo_host)
+        subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit,mongo_host)))
     if subtasks:
         job = TaskSet(tasks=subtasks)
         result_set = job.apply_async()
-    return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,(new_cat + update_cat)*3)
+    return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,len(subtasks))
 
 @task()
 def validate_nas_files(bag_name,local_source_path,mongo_host):
