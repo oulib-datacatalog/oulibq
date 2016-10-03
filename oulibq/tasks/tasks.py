@@ -1,6 +1,7 @@
 from celery.task import task
 from celery import states
 from celery.exceptions import Ignore
+from celery.task.sets import TaskSet
 #from dockertask import docker_task
 from subprocess import call,STDOUT
 #import requests
