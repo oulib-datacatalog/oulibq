@@ -5,7 +5,7 @@ from celery.task.sets import TaskSet
 #from dockertask import docker_task
 from subprocess import call,STDOUT
 #import requests
-import os, hashlib,bagit
+import os, hashlib, bagit
 from pymongo import MongoClient
 import boto3,shutil
 from pandas import read_csv
@@ -120,9 +120,10 @@ def validate_norfile_bag(bag_name,local_source_path,mongo_host):
     bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
     if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
         inventory_metadata['norfile']['exists']=True
+        bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
+        inventory_metadata['norfile']['valid']=bag.is_valid()
     else:
         inventory_metadata['norfile']['exists']=False
-    inventory_metadata['norfile']['valid']=bag.is_valid() 
     db.catalog.bagit_inventory.save(inventory_metadata)
     return "SUCCESS"
 
