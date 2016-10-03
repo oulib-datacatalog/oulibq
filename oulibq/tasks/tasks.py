@@ -23,43 +23,73 @@ def add(x, y):
     return result
 
 @task()
-def digilab_inventory(project='original_bags',department='DigiLab',nas_bagit='/mnt/nas/bagit2',norfile_bagit='/mnt/norfile/UL-BAGIT',s3_bucket='ul-bagit',mongo_host='oulib_mongo'):
+def digilab_inventory(bags=None,project='original_bags',department='DigiLab',nas_bagit='/mnt/nas/bagit2',norfile_bagit='/mnt/norfile/UL-BAGIT',s3_bucket='ul-bagit',mongo_host='oulib_mongo'):
     """
     
     """
     #catalog
     db=MongoClient(mongo_host)
-    #get list of bags from norfile 
-    bagits=[name for name in os.listdir(norfile_bagit) if os.path.isdir("{0}/{1}".format(norfile_bagit,name))]
+    #get list of bags from norfile
+    if bags:
+        bagits=bags.split(',')
+    else: 
+        bagits=[name for name in os.listdir(norfile_bagit) if os.path.isdir("{0}/{1}".format(norfile_bagit,name))]
     vailid_bags=[]
     for itm in bagits:
         if os.path.isfile("{0}/{1}/bagit.txt".format(norfile_bagit,itm)):
-             valid_bags.append(itm)
+            valid_bags.append(itm)
+    tasks=[]
     for bag in valid_bags:
         if db.catalog.bagit_inventory.find({'bag':bag}).count()>0:
             inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag})
         else:
             #new item to inventory
             inventory_metadata={'project':project,'department':department, 'bag':bag,'s3_bucket':s3_bucket,
-                                's3':{'state':'','manifest':'','verified':[],'error':[]},
-                                'norfile':{'location':'UL-BAGIT','valid':''},'nas':{'state':'exists','location':''}}
-                
-        inventory_metadata['norfile']['valid']=validate_local_bag(bag,norfile_bagit)
-        inventory_metadata['s3']=validate_s3_files(bag,norfile_bagit,s3_bucket)
+                                's3':{'exists':False,'valid':False,'bucket':'','manifest':'','verified':[],'error':[]},
+                                'norfile':{'exists':False,'valid':False,'location':'UL-BAGIT'},
+                                'nas':{'exists':False,'place_holder':False,'location':''}}
+       
         #save inventory metadata
         db.catalog.bagit_inventory.save(inventory_metadata)
-        #print inventory_metadata
+        #norfile
+        tasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit,db)))
+        #s3
+        tasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,db)))
+        #nas
+        tasks.append(validate_nas_files(args=(bag,nas_bagit,db)
+    job = TaskSet(tasks=tasks)
+    result_set = job.apply_async()
+    return valid_bags
+
+@task()
+def validate_nas_files(bag_name,local_source_path,db):
+    inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
+    if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
+        inventory_metadata['nas']['exists']=True
+        inventory_metadata['nas']['location']='{0}/{1}'.format(nas_bagit,bag)
+    elif os.path.exists('{0}/{1}'.format(local_source_path,bag_name)):
+        inventory_metadata['nas']['exists']=False
+        inventory_metadata['nas']['place_holder']=True
+        inventory_metadata['nas']['location']=''
+    else:
+        inventory_metadata['nas']['exists']=False
+        inventory_metadata['nas']['place_holder']=False
+        inventory_metadata['nas']['location']=''
+    db.catalog.bagit_inventory.save(inventory_metadata)
     return "SUCCESS"
 
 @task()
-def validate_s3_files(bag_name,local_source_path,s3_bucket,metadata={'state':'','manifest':'','verified':[],'error':[]}):
+def validate_s3_files(bag_name,local_source_path,s3_bucket,db):
+    inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
+    metadata=inventory_metadata['s3']
     s3 = boto3.client('s3')
     s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=bag_name,MaxKeys=1)
     if 'Contents' in s3_key:
-        metadata['state']='Present'
+        metadata['exists']=True
         manifest = "{0}/{1}/manifest-md5.txt".format(local_source_path,bag_name)
         metadata['manifest']=manifest
         data=read_csv(manifest,sep=" ",usecols=[0,2],names=['md5','filename'],header=None,)
+        metadata['bucket']=s3_bucket
         for index, row in data.iterrows():
             bucket_key ="{0}/{1}".format(bag_name,row.filename)
             etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
@@ -68,13 +98,23 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,metadata={'state':'',
             else:
                 metadata['error'].append(bucket_key)
     else:
-        metadata['state']='Not Present'
-    return metadata
+        metadata['exists']=False
+    inventory_metadata['s3']=metadata
+    db.catalog.bagit_inventory.save(inventory_metadata)
+    return "SUCCESS"
+    #return metadata
     
 @task()
-def validate_local_bag(bag_name,local_source_path):
+def validate_norfile_bag(bag_name,local_source_path,db):
+    inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
     bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
-    return bag.is_valid()
+    if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
+        inventory_metadata['norfile']['exists']=True
+    else:
+        inventory_metadata['norfile']['exists']=False
+    inventory_metadata['norfile']['valid']=bag.is_valid() 
+    db.catalog.bagit_inventory.save(inventory_metadata)
+    return "SUCCESS"
 
 @task(bind=True)
 def copy_bag(self,bag_name,source_path,dest_path):
