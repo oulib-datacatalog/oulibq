@@ -30,14 +30,15 @@ def digilab_inventory(bags=None,project='original_bags',department='DigiLab',nas
     #catalog
     db=MongoClient(mongo_host)
     #get list of bags from norfile
-    if bags:
-        bagits=bags.split(',')
-    else: 
-        bagits=[name for name in os.listdir(norfile_bagit) if os.path.isdir("{0}/{1}".format(norfile_bagit,name))]
     valid_bags=[]
-    for itm in bagits:
-        if os.path.isfile("{0}/{1}/bagit.txt".format(norfile_bagit,itm)):
-            valid_bags.append(itm)
+    if bags:
+        valid_bags=bags.split(',')
+    else: 
+        valid_bags=[name for name in os.listdir(norfile_bagit) if os.path.isdir("{0}/{1}".format(norfile_bagit,name))]
+    
+    #remove hidden folders
+    valid_bags = [x for x in valid_bags if not x.startswith(('_','.'))]
+
     subtasks=[]
     new_cat=0
     update_cat=0
