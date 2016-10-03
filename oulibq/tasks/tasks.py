@@ -39,30 +39,36 @@ def digilab_inventory(bags=None,project='original_bags',department='DigiLab',nas
         if os.path.isfile("{0}/{1}/bagit.txt".format(norfile_bagit,itm)):
             valid_bags.append(itm)
     tasks=[]
+    new_cat=0
+    update_cat=0
     for bag in valid_bags:
         if db.catalog.bagit_inventory.find({'bag':bag}).count()>0:
             inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag})
+            update_cat+=1
         else:
             #new item to inventory
             inventory_metadata={'project':project,'department':department, 'bag':bag,'s3_bucket':s3_bucket,
                                 's3':{'exists':False,'valid':False,'bucket':'','manifest':'','verified':[],'error':[]},
                                 'norfile':{'exists':False,'valid':False,'location':'UL-BAGIT'},
                                 'nas':{'exists':False,'place_holder':False,'location':''}}
+            new_cat+=1
        
         #save inventory metadata
         db.catalog.bagit_inventory.save(inventory_metadata)
         #norfile
-        tasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit,db)))
+        tasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit,mongo_host)))
         #s3
-        tasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,db)))
+        tasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,mongo_host)))
         #nas
-        tasks.append(validate_nas_files(args=(bag,nas_bagit,db)
-    job = TaskSet(tasks=tasks)
-    result_set = job.apply_async()
-    return valid_bags
+        tasks.append(validate_nas_files(args=(bag,nas_bagit,mongo_host)
+    if tasks:
+        job = TaskSet(tasks=tasks)
+        result_set = job.apply_async()
+    return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,(new_cat + update_cat)*3)
 
 @task()
-def validate_nas_files(bag_name,local_source_path,db):
+def validate_nas_files(bag_name,local_source_path,mongo_host):
+    db=MongoClient(mongo_host)
     inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
     if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
         inventory_metadata['nas']['exists']=True
@@ -79,7 +85,8 @@ def validate_nas_files(bag_name,local_source_path,db):
     return "SUCCESS"
 
 @task()
-def validate_s3_files(bag_name,local_source_path,s3_bucket,db):
+def validate_s3_files(bag_name,local_source_path,s3_bucket,mongo_host):
+    db=MongoClient(mongo_host)
     inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
     metadata=inventory_metadata['s3']
     s3 = boto3.client('s3')
@@ -105,7 +112,8 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,db):
     #return metadata
     
 @task()
-def validate_norfile_bag(bag_name,local_source_path,db):
+def validate_norfile_bag(bag_name,local_source_path,mongo_host):
+    db=MongoClient(mongo_host)
     inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
     bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
     if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
