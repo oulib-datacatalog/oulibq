@@ -181,7 +181,7 @@ def calculate_multipart_etag(source_path, chunk_size=8, expected=None):
     with open(source_path,'rb') as fp:
         while True:
 
-            data = fp.read(chunk_size)
+            data = fp.read(int(chunk_size))
 
             if not data:
                 break
