@@ -102,7 +102,7 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,mongo_host):
         for index, row in data.iterrows():
             bucket_key ="{0}/{1}".format(bag_name,row.filename)
             etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
-            if calculate_multipart_etag("{0}/{1}".format(local_source_path,bucket_key),etag) or etag==row.md5:
+            if calculate_multipart_etag("{0}/{1}".format(local_source_path,bucket_key),expected=etag) or etag==row.md5:
                 metadata['verified'].append(bucket_key)
             else:
                 metadata['error'].append(bucket_key)
@@ -180,15 +180,11 @@ def calculate_multipart_etag(source_path, chunk_size=8, expected=None):
 
     with open(source_path,'rb') as fp:
         while True:
-
-            data = fp.read(int(chunk_size))
-
+            data = fp.read(chunk_size)
             if not data:
                 break
             md5s.append(hashlib.md5(data))
-
     digests = b"".join(m.digest() for m in md5s)
-
     new_md5 = hashlib.md5(digests)
     new_etag = '"%s-%s"' % (new_md5.hexdigest(),len(md5s))
     if expected:
