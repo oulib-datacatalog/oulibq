@@ -38,7 +38,7 @@ def digilab_inventory(bags=None,project='original_bags',department='DigiLab',nas
     for itm in bagits:
         if os.path.isfile("{0}/{1}/bagit.txt".format(norfile_bagit,itm)):
             valid_bags.append(itm)
-    tasks=[]
+    subtasks=[]
     new_cat=0
     update_cat=0
     for bag in valid_bags:
@@ -56,13 +56,13 @@ def digilab_inventory(bags=None,project='original_bags',department='DigiLab',nas
         #save inventory metadata
         db.catalog.bagit_inventory.save(inventory_metadata)
         #norfile
-        tasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit,mongo_host)))
+        subtasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit,mongo_host)))
         #s3
-        tasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,mongo_host)))
+        subtasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,mongo_host)))
         #nas
-        tasks.append(validate_nas_files(args=(bag,nas_bagit,mongo_host)
-    if tasks:
-        job = TaskSet(tasks=tasks)
+        subtasks.append(validate_nas_files(args=(bag,nas_bagit,mongo_host)
+    if subtasks:
+        job = TaskSet(tasks=subtasks)
         result_set = job.apply_async()
     return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,(new_cat + update_cat)*3)
 
