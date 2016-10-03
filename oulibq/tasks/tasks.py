@@ -74,7 +74,7 @@ def validate_nas_files(bag_name,local_source_path,mongo_host):
     inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
     if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
         inventory_metadata['nas']['exists']=True
-        inventory_metadata['nas']['location']='{0}/{1}'.format(nas_bagit,bag)
+        inventory_metadata['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
     elif os.path.exists('{0}/{1}'.format(local_source_path,bag_name)):
         inventory_metadata['nas']['exists']=False
         inventory_metadata['nas']['place_holder']=True
