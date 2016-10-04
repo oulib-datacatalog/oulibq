@@ -146,7 +146,7 @@ def clean_nas_files(mongo_host):
 
 def remove_nas_files(bag_name,mongo_host,db):
     itm = db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    shutil.rmtree(itm['nas']['location'])
+    shutil.rmtree(itm['nas']['location'],ignore_errors=True)
     itm['nas']['exists']=False
     itm['nas']['place_holder']=True
     open(itm['nas']['location'], 'a').close()
