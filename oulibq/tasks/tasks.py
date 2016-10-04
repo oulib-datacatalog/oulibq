@@ -102,7 +102,7 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,mongo_host):
         for index, row in data.iterrows():
             bucket_key ="{0}/{1}".format(bag_name,row.filename)
             etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
-            if calculate_multipart_etag("{0}/{1}".format(local_source_path,bucket_key),expected=etag) or etag==row.md5:
+            if calculate_multipart_etag("{0}/{1}".format(local_source_path,bucket_key),etag) or etag==row.md5:
                 metadata['verified'].append(bucket_key)
             else:
                 metadata['error'].append(bucket_key)
@@ -165,19 +165,17 @@ def upload_bag_s3(self,bag_name,source_path,s3_bucket='ul-bagit'):
         
     return msg
   
-def calculate_multipart_etag(source_path, chunk_size=8, expected=None):
+def calculate_multipart_etag(source_path,etag, chunk_size=8):
 
     """
     calculates a multipart upload etag for amazon s3
     Arguments:
-        source_path -- The file to calculate the etag for
+        source_path -- The file to calculate the etag 
+        etag -- s3 etag to compare
     Keyword Arguments:
         chunk_size -- The chunk size to calculate for. Default 8
-        expected -- If passed a string, the string will be compared and return True or False if match
     """
-
     md5s = []
-
     with open(source_path,'rb') as fp:
         while True:
             data = fp.read(chunk_size)
@@ -187,10 +185,8 @@ def calculate_multipart_etag(source_path, chunk_size=8, expected=None):
     digests = b"".join(m.digest() for m in md5s)
     new_md5 = hashlib.md5(digests)
     new_etag = '"%s-%s"' % (new_md5.hexdigest(),len(md5s))
-    if expected:
-        if not expected==new_etag:
-            return False
-        else:
-            return True
-
-    return new_etag    
+    print source_path,new_etag,etag
+    if etag==new_etag:
+        return True
+    else:
+        return False
