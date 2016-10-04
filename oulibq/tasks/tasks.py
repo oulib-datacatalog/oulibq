@@ -99,6 +99,8 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,mongo_host):
         metadata['manifest']=manifest
         data=read_csv(manifest,sep=" ",usecols=[0,2],names=['md5','filename'],header=None,)
         metadata['bucket']=s3_bucket
+        metadata['verified']=[]
+        metadata['error']=[]
         for index, row in data.iterrows():
             bucket_key ="{0}/{1}".format(bag_name,row.filename)
             etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
@@ -106,6 +108,10 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,mongo_host):
                 metadata['verified'].append(bucket_key)
             else:
                 metadata['error'].append(bucket_key)
+        if len(metadata['error'])>0:
+            metadata['valid']=False
+        else:
+            metadata['valid']=True
     else:
         metadata['exists']=False
     inventory_metadata['s3']=metadata
