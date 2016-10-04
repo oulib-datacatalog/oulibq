@@ -185,7 +185,7 @@ def calculate_multipart_etag(source_path,etag, chunk_size=8):
             md5s.append(hashlib.md5(data))
     digests = b"".join(m.digest() for m in md5s)
     new_md5 = hashlib.md5(digests)
-    new_etag = '"%s-%s"' % (new_md5.hexdigest(),len(md5s))
+    new_etag = '%s-%s' % (new_md5.hexdigest(),len(md5s))
     print source_path,new_etag,etag
     if etag==new_etag:
         return True
