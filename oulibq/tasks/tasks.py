@@ -134,16 +134,23 @@ def validate_norfile_bag(bag_name,local_source_path,mongo_host):
     return "SUCCESS"
 
 @task()
-def remove_nas_files(mongo_host):
+def clean_nas_files(mongo_host):
     db=MongoClient(mongo_host)
-    for itm in db.catalog.bagit_inventory.find({},snapshot=True):
+    subtasks=[]
+    for itm in db.catalog.bagit_inventory.find({}):
         if itm['s3']['valid'] and itm['norfile']['valid'] and itm['nas']['exists']:
-            shutil.rmtree(itm['nas']['location'])
-            itm['nas']['exists']=False
-            itm['nas']['place_holder']=True
-            open(itm['nas']['location'], 'a').close()
-            db.catalog.bagit_inventory.save(itm)
+            subtasks.append(itm['bag'])
+    for itm in subtasks:
+        remove_nas_files(itm,mongo_host,db)
     return "SUCCESS"
+
+def remove_nas_files(bag_name,mongo_host,db):
+    itm = db.catalog.bagit_inventory.find_one({'bag':bag_name})
+    shutil.rmtree(itm['nas']['location'])
+    itm['nas']['exists']=False
+    itm['nas']['place_holder']=True
+    open(itm['nas']['location'], 'a').close()
+    db.catalog.bagit_inventory.save(itm)
 
 @task(bind=True)
 def copy_bag(self,bag_name,source_path,dest_path):
