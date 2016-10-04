@@ -176,6 +176,7 @@ def calculate_multipart_etag(source_path,etag, chunk_size=8):
         chunk_size -- The chunk size to calculate for. Default 8
     """
     md5s = []
+    chunk_size = chunk_size * 1024 * 1024
     with open(source_path,'rb') as fp:
         while True:
             data = fp.read(chunk_size)
