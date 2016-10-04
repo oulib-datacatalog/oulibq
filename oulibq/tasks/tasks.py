@@ -133,6 +133,18 @@ def validate_norfile_bag(bag_name,local_source_path,mongo_host):
     db.catalog.bagit_inventory.save(inventory_metadata)
     return "SUCCESS"
 
+@task()
+def remove_nas_files(mongo_host):
+    db=MongoClient(mongo_host)
+    for itm in db.catalog.bagit_inventory.find({},snapshot=True):
+        if itm['s3']['valid'] and itm['norfile']['valid'] and itm['nas']['exists']:
+            shutil.rmtree(itm['nas']['location'])
+            itm['nas']['exists']=False
+            itm['nas']['place_holder']=True
+            open(itm['nas']['location'], 'a').close()
+            db.catalog.bagit_inventory.save(itm)
+    return "SUCCESS"
+
 @task(bind=True)
 def copy_bag(self,bag_name,source_path,dest_path):
     dest="{0}/{1}".format(dest_path,bag_name)
@@ -192,7 +204,7 @@ def calculate_multipart_etag(source_path,etag, chunk_size=8):
     digests = b"".join(m.digest() for m in md5s)
     new_md5 = hashlib.md5(digests)
     new_etag = '%s-%s' % (new_md5.hexdigest(),len(md5s))
-    print source_path,new_etag,etag
+    #print source_path,new_etag,etag
     if etag==new_etag:
         return True
     else:
