@@ -88,8 +88,7 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,mongo_ho
         if not inventory_metadata['s3']['valid'] or force:
             subtasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,mongo_host)))
         #nas
-        if not inventory_metadata['nas']['place_holder'] or force:
-            subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit,mongo_host)))
+        subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit,mongo_host)))
     if subtasks:
         job = TaskSet(tasks=subtasks)
         result_set = job.apply_async()
