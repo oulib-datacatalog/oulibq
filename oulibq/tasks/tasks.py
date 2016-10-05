@@ -103,6 +103,7 @@ def validate_nas_files(bag_name,local_source_paths,mongo_host):
     for local_source_path in local_source_paths:
         if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
             inventory_metadata['nas']['exists']=True
+            inventory_metadata['nas']['place_holder']=False
             inventory_metadata['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
             location+=1
         elif os.path.exists('{0}/{1}'.format(local_source_path,bag_name)):
