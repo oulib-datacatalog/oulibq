@@ -11,25 +11,46 @@ import boto3,shutil
 from pandas import read_csv
 #Default base directory 
 #basedir="/data/static/"
-mounts_hostname = "dev-mstacy"
-
-#Example task
-@task()
-def add(x, y):
-    """ Example task that adds two numbers or strings
-        args: x and y
-        return addition or concatination of strings
-    """
-    result = x + y
-    return result
 
 @task()
-def digilab_inventory(bags=None,project='original_bags',department='DigiLab',nas_bagit='/mnt/nas/bagit2',norfile_bagit='/mnt/norfile/UL-BAGIT',s3_bucket='ul-bagit',mongo_host='oulib_mongo'):
+def digilab_inventory(bags=None,force=None,project=None,department=None,mongo_host='oulib_mongo'):
     """
-    
+    DigiLab Inventory Task
+    *REQUIRED*
+    1. Catalog must contain Celery worker config. Default celery_worker = "dev-mstacy".
+       Default Configuration
+        {
+            "s3": {
+                "bucket": "ul-bagit"
+            }, 
+            "nas": {
+                "bagit": "/mnt/nas/bagit", 
+                "bagit2": "/mnt/nas/bagit2"
+            }, 
+            "celery_worker": "dev-mstacy", 
+            "norfile": {
+                "bagit": "/mnt/norfile/UL-BAGIT"
+            }
+        }
+    2. AWS CLI client is required and credentials configured!
+    *PARAMETERS*
+    1. args: None
+    2. kwargs:
+        bags=None #comma separated string with bag names to inventory.
+        force=None #if None then valid components will not be inventory. If not None will re-inventory all bag components
+        project= None # add project metadata
+        department= None # add project Department information
+        mongo_host='oulib_mongo # mongo host connection
     """
     #catalog
     db=MongoClient(mongo_host)
+    #Celery Worker storage connections
+    celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
+    celery_config=db.catalog.celery_worker_config.find_one({"celery_worker":celery_worker_hostname})
+    #set variables
+    nas_bagit=[celery_config['nas']['bagit2'],celery_config['nas']['bagit']]
+    norfile_bagit=celery_config['norfile']['bagit']
+    s3_bucket=celery_config['s3']['bucket']
     #get list of bags from norfile
     valid_bags=[]
     if bags:
@@ -49,41 +70,51 @@ def digilab_inventory(bags=None,project='original_bags',department='DigiLab',nas
             update_cat+=1
         else:
             #new item to inventory
-            inventory_metadata={'project':project,'department':department, 'bag':bag,'s3_bucket':s3_bucket,
+            inventory_metadata={'project':'','department':'', 'bag':bag,'s3_bucket':s3_bucket,
                                 's3':{'exists':False,'valid':False,'bucket':'','manifest':'','verified':[],'error':[]},
                                 'norfile':{'exists':False,'valid':False,'location':'UL-BAGIT'},
                                 'nas':{'exists':False,'place_holder':False,'location':''}}
             new_cat+=1
-       
+        if project:
+            inventory_metadata['project']=project
+        if department:
+            inventory_metadata['department']=department
         #save inventory metadata
         db.catalog.bagit_inventory.save(inventory_metadata)
         #norfile
-        subtasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit,mongo_host)))
+        if not inventory_metadata['norfile']['valid'] or force:
+            subtasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit,mongo_host)))
         #s3
-        subtasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,mongo_host)))
+        if not inventory_metadata['s3']['valid'] or force:
+            subtasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,mongo_host)))
         #nas
-        subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit,mongo_host)))
+        if not inventory_metadata['nas']['place_holder'] or force:
+            subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit,mongo_host)))
     if subtasks:
         job = TaskSet(tasks=subtasks)
         result_set = job.apply_async()
     return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,len(subtasks))
 
 @task()
-def validate_nas_files(bag_name,local_source_path,mongo_host):
+def validate_nas_files(bag_name,local_source_paths,mongo_host):
     db=MongoClient(mongo_host)
     inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
-        inventory_metadata['nas']['exists']=True
-        inventory_metadata['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
-    elif os.path.exists('{0}/{1}'.format(local_source_path,bag_name)):
-        inventory_metadata['nas']['exists']=False
-        inventory_metadata['nas']['place_holder']=True
-        inventory_metadata['nas']['location']=''
-    else:
-        inventory_metadata['nas']['exists']=False
-        inventory_metadata['nas']['place_holder']=False
-        inventory_metadata['nas']['location']=''
-    db.catalog.bagit_inventory.save(inventory_metadata)
+    location=0
+    for local_source_path in local_source_paths:
+        if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
+            inventory_metadata['nas']['exists']=True
+            inventory_metadata['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
+            location+=1
+        elif os.path.exists('{0}/{1}'.format(local_source_path,bag_name)):
+            inventory_metadata['nas']['exists']=False
+            inventory_metadata['nas']['place_holder']=True
+            inventory_metadata['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
+            location+=1
+    if location>1:
+        inventory_metadata['nas']['error']="Multiple nas locations"
+    cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
+    cas['nas']=inventory_metadata['nas']
+    db.catalog.bagit_inventory.save(cas)
     return "SUCCESS"
 
 @task()
@@ -114,8 +145,9 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,mongo_host):
             metadata['valid']=True
     else:
         metadata['exists']=False
-    inventory_metadata['s3']=metadata
-    db.catalog.bagit_inventory.save(inventory_metadata)
+    cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
+    cas['s3']=metadata
+    db.catalog.bagit_inventory.save(cas)
     return "SUCCESS"
     #return metadata
     
@@ -130,7 +162,10 @@ def validate_norfile_bag(bag_name,local_source_path,mongo_host):
         inventory_metadata['norfile']['valid']=bag.is_valid()
     else:
         inventory_metadata['norfile']['exists']=False
-    db.catalog.bagit_inventory.save(inventory_metadata)
+        inventory_metadata['norfile']['valid']=False
+    cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
+    cas['norfile']=inventory_metadata['norfile']
+    db.catalog.bagit_inventory.save(cas)
     return "SUCCESS"
 
 @task()
