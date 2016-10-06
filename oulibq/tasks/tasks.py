@@ -155,11 +155,17 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,mongo_host):
 def validate_norfile_bag(bag_name,local_source_path,mongo_host):
     db=MongoClient(mongo_host)
     inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
+    #bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
     if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
         inventory_metadata['norfile']['exists']=True
         bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
-        inventory_metadata['norfile']['valid']=bag.is_valid()
+        if bag.has_oxum():
+            inventory_metadata['norfile']['valid']=bag.is_valid(fast=True)
+        else:
+            try:
+                inventory_metadata['norfile']['valid']=bag.validate(processes=4)
+            except:
+                raise
     else:
         inventory_metadata['norfile']['exists']=False
         inventory_metadata['norfile']['valid']=False
