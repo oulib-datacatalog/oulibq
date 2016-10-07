@@ -128,7 +128,8 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,mongo_host):
         metadata['exists']=True
         manifest = "{0}/{1}/manifest-md5.txt".format(local_source_path,bag_name)
         metadata['manifest']=manifest
-        data=read_csv(manifest,sep=" ",usecols=[0,2],names=['md5','filename'],header=None,)
+        #data=read_csv(manifest,sep=" ",usecols=[0,2],names=['md5','filename'],header=None,)
+        data=read_csv(manifest,sep="  ",names=['md5','filename'],header=None,)
         metadata['bucket']=s3_bucket
         metadata['verified']=[]
         metadata['error']=[]
