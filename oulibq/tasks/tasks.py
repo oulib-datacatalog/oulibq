@@ -95,7 +95,7 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,mongo_ho
     return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,len(subtasks))
 
 @task()
-def upload_bagit_s3(mongo_host='oulib_mongo'):
+def s3_bags_check(mongo_host='oulib_mongo'):
     #catalog
     db=MongoClient(mongo_host)
     #Celery Worker storage connections
