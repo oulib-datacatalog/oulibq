@@ -95,6 +95,22 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,mongo_ho
     return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,len(subtasks))
 
 @task()
+def upload_bagit_s3(mongo_host='oulib_mongo'):
+    #catalog
+    db=MongoClient(mongo_host)
+    #Celery Worker storage connections
+    celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
+    celery_config=db.catalog.celery_worker_config.find_one({"celery_worker":celery_worker_hostname})
+    norfile_bagit=celery_config['norfile']['bagit']
+    subtasks=[]
+    for itm in db.catalog.bagit_inventory.find({"s3.exists":False}):
+        subtasks.append(itm['bag'])
+    result=",".join(subtasks)
+    return "{0} bags: {1}".format(len(subtasks),result)
+        
+    
+
+@task()
 def validate_nas_files(bag_name,local_source_paths,mongo_host):
     db=MongoClient(mongo_host)
     inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
@@ -176,7 +192,11 @@ def validate_norfile_bag(bag_name,local_source_path,mongo_host):
     return {'status':"SUCCESS",'args':[bag_name,local_source_path,mongo_host],'norfile':inventory_metadata['norfile']}
 
 @task()
-def clean_nas_files(mongo_host):
+def clean_nas_files(mongo_host="oulib_mongo"):
+    """
+    Clean NAS files is a task that checks the bagit inventory catalog for bags that can be deleted from NAS
+
+    """
     db=MongoClient(mongo_host)
     subtasks=[]
     for itm in db.catalog.bagit_inventory.find({}):
