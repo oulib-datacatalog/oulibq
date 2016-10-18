@@ -95,20 +95,31 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,mongo_ho
     return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,len(subtasks))
 
 @task()
-def s3_bags_check(mongo_host='oulib_mongo'):
+def bags_migrate_s3(mongo_host='oulib_mongo'):
     #catalog
     db=MongoClient(mongo_host)
     #Celery Worker storage connections
     celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
     celery_config=db.catalog.celery_worker_config.find_one({"celery_worker":celery_worker_hostname})
+    #get variable by celory worker
     norfile_bagit=celery_config['norfile']['bagit']
+    s3_bucket=celery_config['s3']['bucket']
     subtasks=[]
+    check_catalog=[]
+    s3 = boto3.client('s3')
     for itm in db.catalog.bagit_inventory.find({"s3.exists":False}):
-        subtasks.append(itm['bag'])
-    result=",".join(subtasks)
-    return "{0} bags: {1}".format(len(subtasks),result)
-        
-    
+        #double check to make sure not already in s3
+        s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=itm ,MaxKeys=1)
+        if not 'Contents' in s3_key:
+            subtasks.append(upload_bag_s3.subtask(args=(itm,norfile_bagit)))
+        else:
+            check_catalog.append(itm)
+    if subtasks:
+        job = TaskSet(tasks=subtasks)
+        result_set = job.apply_async()
+
+    check=",".join(check_catalog)
+    return "{0} subtasks('upload_bag_s3') submitted. Check Catalog: {1}".format(len(subtasks),check)
 
 @task()
 def validate_nas_files(bag_name,local_source_paths,mongo_host):
@@ -208,11 +219,15 @@ def clean_nas_files(mongo_host="oulib_mongo"):
 
 def remove_nas_files(bag_name,mongo_host,db):
     itm = db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    shutil.rmtree(itm['nas']['location'],ignore_errors=True)
-    itm['nas']['exists']=False
-    itm['nas']['place_holder']=True
-    open(itm['nas']['location'], 'a').close()
-    db.catalog.bagit_inventory.save(itm)
+    if not itm['nas']['location']=="/" and len(itm['nas']['location'])>9:
+        call(["rm","-rf",itm['nas']['location']])
+        #shutil.rmtree(itm['nas']['location'],ignore_errors=True)
+        itm['nas']['exists']=False
+        itm['nas']['place_holder']=True
+        open(itm['nas']['location'], 'a').close()
+        db.catalog.bagit_inventory.save(itm)
+    else:
+        pass
 
 @task(bind=True)
 def copy_bag(self,bag_name,source_path,dest_path):
@@ -235,7 +250,7 @@ def upload_bag_s3(self,bag_name,source_path,s3_bucket='ul-bagit'):
     """
     AWS CLI tool must be installed and aws keys setup
     """
-    task_id = str(teco_spruce_simulation.request.id)
+    task_id = str(upload_bag_s3.request.id)
     source ="{0}/{1}".format(source_path,bag_name)
     s3_loc = "s3://{0}/{1}".format(s3_bucket,bag_name)
     log=open("{0}.tmp".format(task_id),"w+")
