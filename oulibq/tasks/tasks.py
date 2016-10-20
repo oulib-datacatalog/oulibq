@@ -210,24 +210,34 @@ def clean_nas_files(mongo_host="oulib_mongo"):
     """
     db=MongoClient(mongo_host)
     subtasks=[]
+    errors=[]
     for itm in db.catalog.bagit_inventory.find({}):
         if itm['s3']['valid'] and itm['norfile']['valid'] and itm['nas']['exists']:
             subtasks.append(itm['bag'])
     for itm in subtasks:
-        remove_nas_files(itm,mongo_host,db)
-    return "SUCCESS"
+        try:
+            remove_nas_files(itm,mongo_host,db)
+        except Exception as e:
+            errors.append(itm)
+            
+    return "Bags removed: {0}, Bags removal Errors: {1}".format((len(subtasks)-len(errors)),len(errors))
 
 def remove_nas_files(bag_name,mongo_host,db):
     itm = db.catalog.bagit_inventory.find_one({'bag':bag_name})
     if not itm['nas']['location']=="/" and len(itm['nas']['location'])>9:
-        call(["rm","-rf",itm['nas']['location']])
+        status=call(["rm","-rf",itm['nas']['location']])
         #shutil.rmtree(itm['nas']['location'],ignore_errors=True)
-        itm['nas']['exists']=False
-        itm['nas']['place_holder']=True
-        open(itm['nas']['location'], 'a').close()
-        db.catalog.bagit_inventory.save(itm)
+        if status == 0:
+            itm['nas']['exists']=False
+            itm['nas']['place_holder']=True
+            open(itm['nas']['location'], 'a').close()
+            db.catalog.bagit_inventory.save(itm)
+        else:
+            itm['nas']['ERROR']="Error removing files: {0}".format(itm['nas']['location'])
+            db.catalog.bagit_inventory.save(itm)
+            raise Exception("Error removing files: {0}".format(itm['nas']['location']))
     else:
-        pass
+        raise Exception("Security Bag location is suspicious")
 
 @task(bind=True)
 def copy_bag(self,bag_name,source_path,dest_path):
