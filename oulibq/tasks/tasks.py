@@ -219,8 +219,8 @@ def clean_nas_files(mongo_host="oulib_mongo"):
             remove_nas_files(itm,mongo_host,db)
         except Exception as e:
             errors.append(itm)
-    bag_errors=","join    
-    return "Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ".format((len(subtasks)-len(errors)),len(errors))
+    bag_errors=",".join(errors)   
+    return "Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ".format((len(subtasks)-len(errors)),len(errors),bag_errors)
 
 def remove_nas_files(bag_name,mongo_host,db):
     itm = db.catalog.bagit_inventory.find_one({'bag':bag_name})
