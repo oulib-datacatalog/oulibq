@@ -109,7 +109,7 @@ def bags_migrate_s3(mongo_host='oulib_mongo'):
     s3 = boto3.client('s3')
     for itm in db.catalog.bagit_inventory.find({"s3.exists":False}):
         #double check to make sure not already in s3
-        s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=itm ,MaxKeys=1)
+        s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=itm['bag'] ,MaxKeys=1)
         if not 'Contents' in s3_key:
             subtasks.append(upload_bag_s3.subtask(args=(itm['bag'],norfile_bagit)))
         else:
