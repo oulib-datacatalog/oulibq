@@ -111,9 +111,9 @@ def bags_migrate_s3(mongo_host='oulib_mongo'):
         #double check to make sure not already in s3
         s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=itm ,MaxKeys=1)
         if not 'Contents' in s3_key:
-            subtasks.append(upload_bag_s3.subtask(args=(itm,norfile_bagit)))
+            subtasks.append(upload_bag_s3.subtask(args=(itm['bag'],norfile_bagit)))
         else:
-            check_catalog.append(itm)
+            check_catalog.append(itm['bag'])
     if subtasks:
         job = TaskSet(tasks=subtasks)
         result_set = job.apply_async()
@@ -219,8 +219,8 @@ def clean_nas_files(mongo_host="oulib_mongo"):
             remove_nas_files(itm,mongo_host,db)
         except Exception as e:
             errors.append(itm)
-            
-    return "Bags removed: {0}, Bags removal Errors: {1}".format((len(subtasks)-len(errors)),len(errors))
+    bag_errors=","join    
+    return "Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ".format((len(subtasks)-len(errors)),len(errors))
 
 def remove_nas_files(bag_name,mongo_host,db):
     itm = db.catalog.bagit_inventory.find_one({'bag':bag_name})
