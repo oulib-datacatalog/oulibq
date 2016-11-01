@@ -264,6 +264,8 @@ def upload_bag_s3(self,bag_name,source_path,s3_bucket='ul-bagit'):
     source ="{0}/{1}".format(source_path,bag_name)
     s3_loc = "s3://{0}/{1}".format(s3_bucket,bag_name)
     log=open("{0}.tmp".format(task_id),"w+")
+    print source
+    print s3_loc
     status=call(['aws','s3','sync',source,s3_loc],stderr=log) 
     if status != 0:
         log.seek(0)
