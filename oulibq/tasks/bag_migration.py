@@ -7,7 +7,7 @@ from subprocess import call,STDOUT
 #import requests
 import os, hashlib, bagit
 from pymongo import MongoClient
-import boto3,shutil
+import boto3,shutil,requests
 from pandas import read_csv
 #Default base directory 
 #basedir="/data/static/"
