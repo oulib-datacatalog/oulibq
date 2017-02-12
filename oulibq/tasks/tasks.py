@@ -94,32 +94,6 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,mongo_ho
         result_set = job.apply_async()
     return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,len(subtasks))
 
-@task()
-def bags_migrate_s3(mongo_host='oulib_mongo'):
-    #catalog
-    db=MongoClient(mongo_host)
-    #Celery Worker storage connections
-    celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
-    celery_config=db.catalog.celery_worker_config.find_one({"celery_worker":celery_worker_hostname})
-    #get variable by celory worker
-    norfile_bagit=celery_config['norfile']['bagit']
-    s3_bucket=celery_config['s3']['bucket']
-    subtasks=[]
-    check_catalog=[]
-    s3 = boto3.client('s3')
-    for itm in db.catalog.bagit_inventory.find({"s3.exists":False}):
-        #double check to make sure not already in s3
-        s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=itm['bag'] ,MaxKeys=1)
-        if not 'Contents' in s3_key:
-            subtasks.append(upload_bag_s3.subtask(args=(itm['bag'],norfile_bagit)))
-        else:
-            check_catalog.append(itm['bag'])
-    if subtasks:
-        job = TaskSet(tasks=subtasks)
-        result_set = job.apply_async()
-
-    check=",".join(check_catalog)
-    return "{0} subtasks('upload_bag_s3') submitted. Check Catalog: {1}".format(len(subtasks),check)
 
 @task()
 def validate_nas_files(bag_name,local_source_paths,mongo_host):
@@ -238,44 +212,6 @@ def remove_nas_files(bag_name,mongo_host,db):
             raise Exception("Error removing files: {0}".format(itm['nas']['location']))
     else:
         raise Exception("Security Bag location is suspicious")
-
-@task(bind=True)
-def copy_bag(self,bag_name,source_path,dest_path):
-    dest="{0}/{1}".format(dest_path,bag_name)
-    source = "{0}/{1}".format(source_path,bag_name)
-    if os.path.isdir(dest):
-        msg = "Bag destination already exists. Host:{0} Destination: {1}".format(mounts_hostname,dest)
-        self.update_state(state=states.FAILURE,meta=msg)
-        raise Ignore()
-        #return "Bag destination already exists. Host:{0} Destination: {1}".format(mounts_hostname,dest)
-    if not os.path.isdir(source):
-        msg="Bag source directory does not exist. {0}".format(source)
-        self.update_state(state=states.FAILURE,meta=msg)
-        raise Ignore()
-    shutil.copytree(source, dest)
-    return "Bag copied from {0} to {1}".format(source,dest)
-
-@task(bind=True)
-def upload_bag_s3(self,bag_name,source_path,s3_bucket='ul-bagit'):
-    """
-    AWS CLI tool must be installed and aws keys setup
-    """
-    task_id = str(upload_bag_s3.request.id)
-    source ="{0}/{1}".format(source_path,bag_name)
-    s3_loc = "s3://{0}/{1}".format(s3_bucket,bag_name)
-    log=open("{0}.tmp".format(task_id),"w+")
-    status=call(['/env/bin/aws','s3','sync',source,s3_loc],stderr=log) 
-    if status != 0:
-        log.seek(0)
-        msg= log.read()
-        log.close()
-        os.remove("{0}.tmp".format(task_id))
-        self.update_state(state=states.FAILURE,meta=msg)
-        raise Ignore()
-    else:
-        msg="Bag uploaded from {0} to {1}".format(source,s3_loc)
-        
-    return msg
   
 def calculate_multipart_etag(source_path,etag, chunk_size=8):
 
