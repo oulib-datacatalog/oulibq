@@ -83,7 +83,7 @@ def bags_migrate_norfile(olderThanDays=10,api_host='dev.libraries.ou.edu'):
     for bag in bags:
         if  (present - os.path.getmtime(os.path.join(nas_bagit, bag))) > olderThanDays:
             if not os.path.isdir("{0}/{1}".format(norfile_bagit,bag)):
-                subtasks.append(copy_bag.subtask(args=(bag,"{0}/{1}".format(nas_bagit,bag),"{0}/{1}".format(norfile_bagit,bag))))
+                subtasks.append(copy_bag.subtask(args=(bag,nas_bagit,norfile_bagit)))
                 bag_names.append(bag)
     if subtasks:
         job = TaskSet(tasks=subtasks)
