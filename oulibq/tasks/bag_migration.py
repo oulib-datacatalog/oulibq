@@ -60,7 +60,7 @@ def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source-bags',api_host='dev.l
     return "{0} subtasks('upload_bag_s3') submitted. Bags: {1}".format(len(subtasks),names)
 
 @task()
-def bags_migrate_norfile(olderThanDays=10):
+def bags_migrate_norfile(olderThanDays=10,api_host='dev.libraries.ou.edu'):
     """
         This task is used at the OU libraries for the migration of bags from Digilab NAS to Norfile(OU S2).
         kwargs:
