@@ -32,6 +32,11 @@ def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source-bags',api_host='dev.l
             s3_folder='source-bags'
             api_host='dev.libraries.ou.edu'
 
+        This will migrate all bags that have not been uploaded to S3. The task does not care whether or 
+        not the bag is valid. I have split that task out and will verify bags after replication. If a bag does
+        not validata will step back and reload back for Norfile. If Norfile does not validate will migrate back
+        to NAS. This provides a consistent upload and migration. This gaurentees backup and will verify later task.
+
     """
     #Celery worker Config from Catalog
     celery_config=get_celery_worker_config(api_host)
@@ -64,8 +69,13 @@ def bags_migrate_norfile(olderThanDays=10,api_host='dev.libraries.ou.edu'):
     """
         This task is used at the OU libraries for the migration of bags from Digilab NAS to Norfile(OU S2).
         kwargs:
-            olderThanDays=10
+            olderThanDays= Default 10 
+            api_host= Default dev.libraries.ou.edu 
 
+        This will migrate all bags from DigiLab NAS to Norfile. The task does not care whether or not the bag 
+        is valid. I have split that task out and will verify bags after replication. If a bag does not validate
+        process will step back and reload back from NAS Location. This provides a consistent upload and migration. 
+        This guarantee backup and will run verification task at a later time.
     """
 
     #Celery worker Config from Catalog
@@ -94,6 +104,14 @@ def bags_migrate_norfile(olderThanDays=10,api_host='dev.libraries.ou.edu'):
 
 @task(bind=True)
 def copy_bag(self,bag_name,source_path,dest_path):
+    """
+        This task copies bag from NAS to Norfile. Task must have access to source and destination.
+
+        args:
+            bag_name -  string bag name
+            source_path - string source path to NAS location. Do not include bag name in variable.
+            dest_path - string destination path to Norfile location. Do not include bag name in variable.
+    """
     dest="{0}/{1}".format(dest_path,bag_name)
     source = "{0}/{1}".format(source_path,bag_name)
     if os.path.isdir(dest):
@@ -111,7 +129,13 @@ def copy_bag(self,bag_name,source_path,dest_path):
 @task(bind=True)
 def upload_bag_s3(self,bag_name,source_path,s3_bucket,s3_location):
     """
-    AWS CLI tool must be installed and aws keys setup
+        This task uploads Norfile bag to AWS S3 bucket.
+
+        args:
+            bag_name (string): Bag Name.
+            source_path (string): Path to Norfile location. Do not include bag name in path.
+            s3_bucket (string): S3 bucket
+            s3_location (string): key within bucket. Example - 'source-bags/Baldi_1706'
     """
     source ="{0}/{1}".format(source_path,bag_name)
     s3_loc = "s3://{0}/{1}".format(s3_bucket,s3_location)
