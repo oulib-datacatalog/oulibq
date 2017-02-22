@@ -56,7 +56,12 @@ def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source-bags',api_host='dev.l
         if not 'Contents' in s3_key:
             subtasks.append(upload_bag_s3.subtask(args=(bag,norfile_bagit,s3_bucket,s3_location)))
             bag_names.append(s3_location)
-
+        else:
+            norfileCount = sum([len(files) for r, d, files in os.walk('{0}/{1}'.format(norfile_bagit,bag))])
+            s3_check = s3.list_objects(Bucket=s3_bucket, Prefix=s3_location)
+            if len(s3_check['Contents']) != norfileCount:
+                subtasks.append(upload_bag_s3.subtask(args=(bag,norfile_bagit,s3_bucket,s3_location)))
+                bag_names.append(s3_location)
     if subtasks:
         job = TaskSet(tasks=subtasks)
         result_set = job.apply_async()
