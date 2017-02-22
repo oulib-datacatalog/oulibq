@@ -24,7 +24,7 @@ def get_celery_worker_config(api_host):
     raise Exception("Celery Worker Config not in catalog")
 
 @task()
-def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source-bags',api_host='dev.libraries.ou.edu'):
+def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source-bags',api_host='dev.libraries.ou.edu',bags=None):
     """
         This task is used at the OU libraries for the migration of bags from Norfile(OU S2) to AWS S3.
         kwargs:
@@ -43,7 +43,10 @@ def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source-bags',api_host='dev.l
     #Norfile bag location
     norfile_bagit=celery_config['norfile']['bagit']
     #All Bag Folders with in Norfile
-    bags =[name for name in os.listdir(norfile_bagit) if os.path.isdir(os.path.join(norfile_bagit, name,'data'))]
+    if bags:
+        bags = bags.split(',')
+    else:
+        bags =[name for name in os.listdir(norfile_bagit) if os.path.isdir(os.path.join(norfile_bagit, name,'data'))]
     #s3_bucket=celery_config['s3']['bucket']
     subtasks=[]
     bag_names=[]
