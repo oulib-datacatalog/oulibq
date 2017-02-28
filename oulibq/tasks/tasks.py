@@ -105,10 +105,10 @@ def digilab_inventory(bags=None,force=None,project=None,department=None):
         #save inventory metadata
         _api_save(inventory_metadata)
         # norfile validation
-        if not inventory_metadata['norfile']['valid'] or force:
+        if not inventory_metadata['locations']['norfile']['valid'] or force:
             subtasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit,mongo_host)))
         #  s3 validataion
-        if not inventory_metadata['s3']['valid'] or force:
+        if not inventory_metadata['locations']['s3']['valid'] or force:
             subtasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,mongo_host)))
         # nas validation
         subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit,mongo_host)))
