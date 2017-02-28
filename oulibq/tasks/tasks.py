@@ -11,9 +11,33 @@ import boto3,shutil
 from pandas import read_csv
 #Default base directory 
 #basedir="/data/static/"
+from bag_migration import get_celery_worker_config
+import ConfigParser
+
+def _get_config_parameter(group,param,config_file="cybercom.cfg"):
+    config = ConfigParser.ConfigParser()
+    config.read(config_file)
+    return config.get(group,param)
+def _api_get(bag,return_all=None):
+    base_url = _get_config_parameter('api','base_url')
+    if return_all:
+        api_url = "{0}catalog/data/catalog/digital_objects/.json?page_size=0".format(base_url)
+    else:
+        query= "{'filter':{'bag':'%s'}}" % (bag)
+        api_url = "{0}catalog/data/catalog/digital_objects/.json?query={1}".format(base_url,query)
+    req =requests.get(api_url)
+    return req.json()
+def _api_save(data):
+    token = _get_config_parameter('api','token')
+    base_url = _get_config_parameter('api','base_url')
+    headers ={"Content-Type":"application/json","Authorization":"Token {0}".format(token)}
+    api_url "{0}catalog/data/catalog/digital_objects/.json".format(base_url)
+    req = requests.post(api_url,data=json.dumps(data),headers=headers)
+    req.raise_for_status()
+    return True
 
 @task()
-def digilab_inventory(bags=None,force=None,project=None,department=None,mongo_host='oulib_mongo'):
+def digilab_inventory(bags=None,force=None,project=None,department=None):
     """
     DigiLab Inventory Task
     *REQUIRED*
@@ -42,8 +66,6 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,mongo_ho
         department= None # add project Department information
         mongo_host='oulib_mongo # mongo host connection
     """
-    #catalog
-    db=MongoClient(mongo_host)
     #Celery Worker storage connections
     celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
     celery_config=db.catalog.celery_worker_config.find_one({"celery_worker":celery_worker_hostname})
@@ -57,37 +79,37 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,mongo_ho
         valid_bags=bags.split(',')
     else: 
         valid_bags=[name for name in os.listdir(norfile_bagit) if os.path.isdir("{0}/{1}".format(norfile_bagit,name))]
-    
     #remove hidden folders
     valid_bags = [x for x in valid_bags if not x.startswith(('_','.'))]
-
+    #variables
     subtasks=[]
     new_cat=0
     update_cat=0
     for bag in valid_bags:
-        if db.catalog.bagit_inventory.find({'bag':bag}).count()>0:
-            inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag})
+        data = _api_get(bag)
+        if data['count']>0:
+            inventory_metadata = data['results'][0] 
             update_cat+=1
         else:
             #new item to inventory
-            inventory_metadata={'project':'','department':'', 'bag':bag,'s3_bucket':s3_bucket,
-                                's3':{'exists':False,'valid':False,'bucket':'','manifest':'','verified':[],'error':[]},
-                                'norfile':{'exists':False,'valid':False,'location':'UL-BAGIT'},
-                                'nas':{'exists':False,'place_holder':False,'location':''}}
+            inventory_metadata={ 'derivatives':{},'project':'','department':'', 'bag':bag,'locations':{
+                                's3':{'exists':False,'valid':False,'bucket':'','validation_date':'','manifest':'','verified':[],'error':[]},
+                                'norfile':{'exists':False,'valid':False,'validation_date':'','location':'UL-BAGIT'},
+                                'nas':{'exists':False,'place_holder':False,'location':''}}}
             new_cat+=1
         if project:
             inventory_metadata['project']=project
         if department:
             inventory_metadata['department']=department
         #save inventory metadata
-        db.catalog.bagit_inventory.save(inventory_metadata)
-        #norfile
+        _api_save(inventory_metadata)
+        # norfile validation
         if not inventory_metadata['norfile']['valid'] or force:
             subtasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit,mongo_host)))
-        #s3
+        #  s3 validataion
         if not inventory_metadata['s3']['valid'] or force:
             subtasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket,mongo_host)))
-        #nas
+        # nas validation
         subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit,mongo_host)))
     if subtasks:
         job = TaskSet(tasks=subtasks)
@@ -96,122 +118,131 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,mongo_ho
 
 
 @task()
-def validate_nas_files(bag_name,local_source_paths,mongo_host):
-    db=MongoClient(mongo_host)
-    inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
+def validate_nas_files(bag_name,local_source_paths):
+    data = _api_get(bag_name)
+    #db=MongoClient(mongo_host)
+    inventory_metadata = data['results'][0]
+    #db.catalog.bagit_inventory.find_one({'bag':bag_name})
     location=0
     for local_source_path in local_source_paths:
         if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
-            inventory_metadata['nas']['exists']=True
-            inventory_metadata['nas']['place_holder']=False
-            inventory_metadata['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
+            inventory_metadata['locations']['nas']['exists']=True
+            inventory_metadata['locations']['nas']['place_holder']=False
+            inventory_metadata['locations']['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
             location+=1
         elif os.path.exists('{0}/{1}'.format(local_source_path,bag_name)):
-            inventory_metadata['nas']['exists']=False
-            inventory_metadata['nas']['place_holder']=True
-            inventory_metadata['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
+            inventory_metadata['locations']['nas']['exists']=False
+            inventory_metadata['locations']['nas']['place_holder']=True
+            inventory_metadata['locations']['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
             location+=1
     if location>1:
-        inventory_metadata['nas']['error']="Multiple nas locations"
-    cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    cas['nas']=inventory_metadata['nas']
-    db.catalog.bagit_inventory.save(cas)
+        inventory_metadata['locations']['nas']['error']="Multiple nas locations"
+    _api_save(inventory_metadata)
+    #cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
+    #cas['nas']=inventory_metadata['nas']
+    #db.catalog.bagit_inventory.save(cas)
     return {'status':"SUCCESS",'args':[bag_name,local_source_paths,mongo_host],'nas':inventory_metadata['nas']}
 
 @task()
-def validate_s3_files(bag_name,local_source_path,s3_bucket,mongo_host):
-    db=MongoClient(mongo_host)
-    inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    metadata=inventory_metadata['s3']
+def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source-bags'):
+    #Find metadata
+    data = _api_get(bag_name)
+    inventory_metadata = data['results'][0] #db.catalog.bagit_inventory.find_one({'bag':bag_name})
+    metadata=inventory_metadata['locations']['s3']
+    # S3 bucket
     s3 = boto3.client('s3')
-    s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=bag_name,MaxKeys=1)
+    s3_key = s3.list_objects(Bucket=s3_bucket, Prefix="{0}/{1}".format(s3_base_key,bag_name),MaxKeys=1)
     if 'Contents' in s3_key:
         metadata['exists']=True
         manifest = "{0}/{1}/manifest-md5.txt".format(local_source_path,bag_name)
         metadata['manifest']=manifest
-        #data=read_csv(manifest,sep=" ",usecols=[0,2],names=['md5','filename'],header=None,)
+        #Read manifest
         data=read_csv(manifest,sep="  ",names=['md5','filename'],header=None,)
         metadata['bucket']=s3_bucket
         metadata['verified']=[]
         metadata['error']=[]
+        metadata['valid']=False
         for index, row in data.iterrows():
-            bucket_key ="{0}/{1}".format(bag_name,row.filename)
+            bucket_key ="{0}/{1}/{2}".format(s3_base_key,bag_name,row.filename)
             etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
             if calculate_multipart_etag("{0}/{1}".format(local_source_path,bucket_key),etag) or etag==row.md5:
                 metadata['verified'].append(bucket_key)
             else:
                 metadata['error'].append(bucket_key)
-        if len(metadata['error'])>0:
-            metadata['valid']=False
-        else:
+        if len(metadata['error'])==0:
             metadata['valid']=True
     else:
         metadata['exists']=False
-    cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    cas['s3']=metadata
-    db.catalog.bagit_inventory.save(cas)
-    return {'status':"SUCCESS",'args':[bag_name,local_source_path,s3_bucket,mongo_host],'s3':metadata}
+    inventory_metadata['locations']['s3']=metadata
+    #Save metadata
+    _api_save(inventory_metadata)
+    return {'status':"SUCCESS",'args':[bag_name,local_source_path,s3_bucket],'s3':metadata}
     #return metadata
     
 @task()
-def validate_norfile_bag(bag_name,local_source_path,mongo_host):
-    db=MongoClient(mongo_host)
-    inventory_metadata = db.catalog.bagit_inventory.find_one({'bag':bag_name})
+def validate_norfile_bag(bag_name,local_source_path):
+    #Find metadata
+    data = _api_get(bag_name)
+    inventory_metadata = data['results'][0]
     #bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
     if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
-        inventory_metadata['norfile']['exists']=True
+        inventory_metadata['locations']['norfile']['exists']=True
         bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
         if bag.has_oxum():
-            inventory_metadata['norfile']['valid']=bag.is_valid(fast=True)
+            inventory_metadata['locations']['norfile']['valid']=bag.is_valid(fast=True)
         else:
             try:
-                inventory_metadata['norfile']['valid']=bag.validate(processes=4)
+                inventory_metadata['locations']['norfile']['valid']=bag.validate(processes=4)
             except:
                 raise
     else:
-        inventory_metadata['norfile']['exists']=False
-        inventory_metadata['norfile']['valid']=False
-    cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    cas['norfile']=inventory_metadata['norfile']
-    db.catalog.bagit_inventory.save(cas)
+        inventory_metadata['locations']['norfile']['exists']=False
+        inventory_metadata['locations']['norfile']['valid']=False
+    #Save metadata
+    _api_save(inventory_metadata)
     return {'status':"SUCCESS",'args':[bag_name,local_source_path,mongo_host],'norfile':inventory_metadata['norfile']}
 
 @task()
-def clean_nas_files(mongo_host="oulib_mongo"):
+def clean_nas_files():
     """
     Clean NAS files is a task that checks the bagit inventory catalog for bags that can be deleted from NAS
 
     """
-    db=MongoClient(mongo_host)
+    #return all digital objects
+    data = _api_get("test",return_all=True)
     subtasks=[]
     errors=[]
-    for itm in db.catalog.bagit_inventory.find({}):
-        if itm['s3']['valid'] and itm['norfile']['valid'] and itm['nas']['exists']:
+    for itm in data['results']:
+        if itm['locations']['s3']['valid'] and itm['locations']['norfile']['valid'] and itm['locations']['nas']['exists']:
             subtasks.append(itm['bag'])
     for itm in subtasks:
         try:
-            remove_nas_files(itm,mongo_host,db)
+            remove_nas_files(itm)
         except Exception as e:
             errors.append(itm)
     bag_errors=",".join(errors)   
     return "Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ".format((len(subtasks)-len(errors)),len(errors),bag_errors)
 
-def remove_nas_files(bag_name,mongo_host,db):
-    itm = db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    if not itm['nas']['location']=="/" and len(itm['nas']['location'])>9:
-        status=call(["rm","-rf",itm['nas']['location']])
-        #shutil.rmtree(itm['nas']['location'],ignore_errors=True)
+def remove_nas_files(bag_name):
+    data = _api_get(bag_name)
+    itm = data['results'][0] 
+    if not itm['locations']['nas']['location']=="/" and len(itm['locations']['nas']['location'])>9:
+        status=call(["rm","-rf",itm['locations']['nas']['location']])
+        #Check status
         if status == 0:
-            itm['nas']['exists']=False
-            itm['nas']['place_holder']=True
-            open(itm['nas']['location'], 'a').close()
-            db.catalog.bagit_inventory.save(itm)
+            itm['locations']['nas']['exists']=False
+            itm['locations']['nas']['place_holder']=True
+            #create placeholder
+            open(itm['locations']['nas']['location'], 'a').close()
+            #Save metadata
+            _api_save(itm)
         else:
-            itm['nas']['ERROR']="Error removing files: {0}".format(itm['nas']['location'])
-            db.catalog.bagit_inventory.save(itm)
-            raise Exception("Error removing files: {0}".format(itm['nas']['location']))
+            itm['locations']['nas']['ERROR']="Error removing files: {0}".format(itm['locations']['nas']['location'])
+            #Save metadata
+            _api_save(itm)
+            raise Exception("Error removing files: {0}".format(itm['locations']['nas']['location']))
     else:
-        raise Exception("Security Bag location is suspicious")
+        raise Exception("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
   
 def calculate_multipart_etag(source_path,etag, chunk_size=8):
 
