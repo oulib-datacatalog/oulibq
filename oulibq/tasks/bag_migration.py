@@ -16,7 +16,7 @@ from pandas import read_csv
 def get_celery_worker_config(api_host):
     celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
     query="?query={'filter':{'celery_worker':'%s'}}" % (celery_worker_hostname)
-    url_mtp= "https://{0}/api/catalog/data/catalog/celery_worker_config/.json{1}"     
+    url_tmp= "https://{0}/api/catalog/data/catalog/celery_worker_config/.json{1}"     
     req = requests.get(url_tmp.format(api_host,query))
     data = req.json()
     if data['count']>0:
