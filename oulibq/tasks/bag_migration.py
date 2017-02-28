@@ -16,7 +16,7 @@ from pandas import read_csv
 def get_celery_worker_config(api_host):
     celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
     query="?query={'filter':{'celery_worker':'%s'}}" % (celery_worker_hostname)
-    url_tmp= "https://{0}/api/catalog/data/catalog/celery_worker_config/.json{1}"     
+    url_mtp= "https://{0}/api/catalog/data/catalog/celery_worker_config/.json{1}"     
     req = requests.get(url_tmp.format(api_host,query))
     data = req.json()
     if data['count']>0:
@@ -159,6 +159,7 @@ def upload_bag_s3(self,bag_name,source_path,s3_bucket,s3_location):
         raise Ignore()
     else:
         msg="Bag uploaded from {0} to {1}".format(source,s3_loc)
-        
+        log.close()
+        os.remove("{0}.tmp".format(task_id)) 
     return msg
   
