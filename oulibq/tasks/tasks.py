@@ -67,8 +67,9 @@ def digilab_inventory(bags=None,force=None,project=None,department=None):
         mongo_host='oulib_mongo # mongo host connection
     """
     #Celery Worker storage connections
-    celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
-    celery_config=db.catalog.celery_worker_config.find_one({"celery_worker":celery_worker_hostname})
+    celery_config = get_celery_worker_config('cc.lib.ou.edu')
+    #celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
+    #celery_config=db.catalog.celery_worker_config.find_one({"celery_worker":celery_worker_hostname})
     #set variables
     nas_bagit=[celery_config['nas']['bagit2'],celery_config['nas']['bagit']]
     norfile_bagit=celery_config['norfile']['bagit']
