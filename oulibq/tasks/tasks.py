@@ -31,7 +31,7 @@ def _api_save(data):
     token = _get_config_parameter('api','token')
     base_url = _get_config_parameter('api','base_url')
     headers ={"Content-Type":"application/json","Authorization":"Token {0}".format(token)}
-    api_url "{0}catalog/data/catalog/digital_objects/.json".format(base_url)
+    api_url = "{0}catalog/data/catalog/digital_objects/.json".format(base_url)
     req = requests.post(api_url,data=json.dumps(data),headers=headers)
     req.raise_for_status()
     return True
