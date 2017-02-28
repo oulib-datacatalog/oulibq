@@ -165,8 +165,9 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source-b
         metadata['valid']=False
         for index, row in data.iterrows():
             bucket_key ="{0}/{1}/{2}".format(s3_base_key,bag_name,row.filename)
+            local_bucket_key = "{0}/{1}".format(bag_name,row.filename)
             etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
-            if calculate_multipart_etag("{0}/{1}".format(local_source_path,bucket_key),etag) or etag==row.md5:
+            if calculate_multipart_etag("{0}/{1}".format(local_source_path,local_bucket_key),etag) or etag==row.md5:
                 metadata['verified'].append(bucket_key)
             else:
                 metadata['error'].append(bucket_key)
