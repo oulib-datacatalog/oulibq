@@ -64,12 +64,9 @@ def digilab_inventory(bags=None,force=None,project=None,department=None):
         force=None #if None then valid components will not be inventory. If not None will re-inventory all bag components
         project= None # add project metadata
         department= None # add project Department information
-        mongo_host='oulib_mongo # mongo host connection
     """
     #Celery Worker storage connections
     celery_config = get_celery_worker_config('cc.lib.ou.edu')
-    #celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
-    #celery_config=db.catalog.celery_worker_config.find_one({"celery_worker":celery_worker_hostname})
     #set variables
     nas_bagit=[celery_config['nas']['bagit2'],celery_config['nas']['bagit']]
     norfile_bagit=celery_config['norfile']['bagit']
@@ -120,6 +117,13 @@ def digilab_inventory(bags=None,force=None,project=None,department=None):
 
 @task()
 def validate_nas_files(bag_name,local_source_paths):
+    """
+    Validation of NAS 
+
+    Agrs: 
+        bag_name - string
+        local_source_paths - list of sources 
+    """
     data = _api_get(bag_name)
     #db=MongoClient(mongo_host)
     inventory_metadata = data['results'][0]
@@ -146,6 +150,13 @@ def validate_nas_files(bag_name,local_source_paths):
 
 @task()
 def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source-bags'):
+    """
+    Validate s3 files
+    args:
+        bag_name,local_source_path,s3_bucket
+    kwargs:
+        s3_base_key='source-bags'
+    """
     #Find metadata
     data = _api_get(bag_name)
     inventory_metadata = data['results'][0] #db.catalog.bagit_inventory.find_one({'bag':bag_name})
@@ -183,6 +194,11 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source-b
     
 @task()
 def validate_norfile_bag(bag_name,local_source_path):
+    """
+    Validate Norfile bag
+    args:
+        bag_name,local_source_path
+    """
     #Find metadata
     data = _api_get(bag_name)
     inventory_metadata = data['results'][0]
@@ -226,6 +242,11 @@ def clean_nas_files():
     return "Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ".format((len(subtasks)-len(errors)),len(errors),bag_errors)
 
 def remove_nas_files(bag_name):
+    """
+    Remove NAS bag
+    agrs:
+        bag_name
+    """
     data = _api_get(bag_name)
     itm = data['results'][0] 
     if not itm['locations']['nas']['location']=="/" and len(itm['locations']['nas']['location'])>9:
