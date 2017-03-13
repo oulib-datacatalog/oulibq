@@ -146,7 +146,7 @@ def validate_nas_files(bag_name,local_source_paths):
     #cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
     #cas['nas']=inventory_metadata['nas']
     #db.catalog.bagit_inventory.save(cas)
-    return {'status':"SUCCESS",'args':[bag_name,local_source_paths],'nas':inventory_metadata['nas']}
+    return {'status':"SUCCESS",'args':[bag_name,local_source_paths],'nas':inventory_metadata['locations']['nas']}
 
 @task()
 def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source-bags'):
@@ -218,7 +218,7 @@ def validate_norfile_bag(bag_name,local_source_path):
         inventory_metadata['locations']['norfile']['valid']=False
     #Save metadata
     _api_save(inventory_metadata)
-    return {'status':"SUCCESS",'args':[bag_name,local_source_path,mongo_host],'norfile':inventory_metadata['norfile']}
+    return {'status':"SUCCESS",'args':[bag_name,local_source_path],'norfile':inventory_metadata['locations']['norfile']}
 
 @task()
 def clean_nas_files():
