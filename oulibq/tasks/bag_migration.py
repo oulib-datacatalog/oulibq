@@ -24,7 +24,7 @@ def get_celery_worker_config(api_host):
     raise Exception("Celery Worker Config not in catalog")
 
 @task()
-def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source-bags',api_host='dev.libraries.ou.edu',bags=None):
+def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source',api_host='dev.libraries.ou.edu',bags=None):
     """
         This task is used at the OU libraries for the migration of bags from Norfile(OU S2) to AWS S3.
         kwargs:
@@ -73,11 +73,11 @@ def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source-bags',api_host='dev.l
     return "{0} subtasks('upload_bag_s3') submitted. Bags: {1}".format(len(subtasks),names)
 
 @task()
-def bags_migrate_norfile(olderThanDays=10,api_host='dev.libraries.ou.edu'):
+def bags_migrate_norfile(olderThanDays=3,api_host='dev.libraries.ou.edu'):
     """
         This task is used at the OU libraries for the migration of bags from Digilab NAS to Norfile(OU S2).
         kwargs:
-            olderThanDays= Default 10 
+            olderThanDays= Default 3
             api_host= Default dev.libraries.ou.edu 
 
         This will migrate all bags from DigiLab NAS to Norfile. The task does not care whether or not the bag 
