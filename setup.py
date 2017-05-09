@@ -9,7 +9,7 @@ setup(name='oulibq',
           'pymongo==3.2.1',
           'requests==2.9.1',
           'boto3==1.4.0',
-          'pandas==0.18.0',
+          'pandas',
           'bagit==1.5.4',
           'awscli==1.11.0'
       ],

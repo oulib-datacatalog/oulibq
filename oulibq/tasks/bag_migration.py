@@ -14,14 +14,14 @@ from pandas import read_csv
 
 
 def get_celery_worker_config(api_host):
-    celery_worker_hostname = os.getenv('celery_worker_hostname', "dev-mstacy")
-    query="?query={'filter':{'celery_worker':'%s'}}" % (celery_worker_hostname)
-    url_tmp= "https://{0}/api/catalog/data/catalog/celery_worker_config/.json{1}"     
-    req = requests.get(url_tmp.format(api_host,query))
-    data = req.json()
-    if data['count']>0:
-        return data['results'][0]
-    raise Exception("Celery Worker Config not in catalog")
+    #check if environ vars are available
+    if not os.getenv('REMOTE_BAGIT_SRC_PATH', None) or not os.getenv('LOCAL_BAGIT_SRC_PATH', None) or not os.getenv('REMOTE_BAGIT_DEST_PATH', None):
+        raise Exception("Environmental Variables not set!")
+    #set config variables
+    config ={"s3":{"bucket": "ul-bagit"}, 
+            "nas":{"bagit":os.getenv('REMOTE_BAGIT_SRC_PATH', None) ,"bagit2": os.getenv('LOCAL_BAGIT_SRC_PATH', None) }, 
+            "norfile":{"bagit": os.getenv('REMOTE_BAGIT_DEST_PATH', None)}}
+    return config
 
 @task()
 def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source',api_host='dev.libraries.ou.edu',bags=None):
