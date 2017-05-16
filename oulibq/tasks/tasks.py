@@ -23,7 +23,7 @@ def _api_get(bag,return_all=None):
     if return_all:
         api_url = "{0}catalog/data/catalog/digital_objects/.json?page_size=0".format(base_url)
     else:
-        query= "{'filter':{'bag':'%s'}}" % (bag)
+        query= '{"filter":{"bag":"%s"}}' % (bag)
         api_url = "{0}catalog/data/catalog/digital_objects/.json?query={1}".format(base_url,query)
     req =requests.get(api_url)
     return req.json()

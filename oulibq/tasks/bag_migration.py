@@ -29,7 +29,7 @@ def bags_migrate_s3(s3_bucket='ul-bagit',s3_folder='source',api_host='dev.librar
         This task is used at the OU libraries for the migration of bags from Norfile(OU S2) to AWS S3.
         kwargs:
             s3_bucket='ul-bagit'
-            s3_folder='source-bags'
+            s3_folder='source'
             api_host='dev.libraries.ou.edu'
 
         This will migrate all bags that have not been uploaded to S3. The task does not care whether or 
@@ -143,7 +143,7 @@ def upload_bag_s3(self,bag_name,source_path,s3_bucket,s3_location):
             bag_name (string): Bag Name.
             source_path (string): Path to Norfile location. Do not include bag name in path.
             s3_bucket (string): S3 bucket
-            s3_location (string): key within bucket. Example - 'source-bags/Baldi_1706'
+            s3_location (string): key within bucket. Example - 'source/Baldi_1706'
     """
     source ="{0}/{1}".format(source_path,bag_name)
     s3_loc = "s3://{0}/{1}".format(s3_bucket,s3_location)
