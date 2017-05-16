@@ -149,13 +149,13 @@ def validate_nas_files(bag_name,local_source_paths):
     return {'status':"SUCCESS",'args':[bag_name,local_source_paths],'nas':inventory_metadata['locations']['nas']}
 
 @task()
-def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source-bags'):
+def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source'):
     """
     Validate s3 files
     args:
         bag_name,local_source_path,s3_bucket
     kwargs:
-        s3_base_key='source-bags'
+        s3_base_key='source'
     """
     #Find metadata
     data = _api_get(bag_name)
