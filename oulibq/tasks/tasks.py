@@ -26,6 +26,8 @@ def _api_get(bag,return_all=None):
         query= '{"filter":{"bag":"%s"}}' % (bag)
         api_url = "{0}catalog/data/catalog/digital_objects/.json?query={1}".format(base_url,query)
     req =requests.get(api_url)
+    if req.status_code > 300:
+        raise Exception("Request Error: {0} {1}".format(api_url,req.text))
     return req.json()
 def _api_save(data):
     token = _get_config_parameter('api','token')
