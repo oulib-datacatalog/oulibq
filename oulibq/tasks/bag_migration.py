@@ -5,7 +5,7 @@ from celery.task.sets import TaskSet
 #from dockertask import docker_task
 from subprocess import call,STDOUT
 #import requests
-import os, hashlib, bagit,time
+import os, hashlib, bagit,time,sys
 from pymongo import MongoClient
 import boto3,shutil,requests
 from pandas import read_csv
