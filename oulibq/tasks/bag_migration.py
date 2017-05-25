@@ -149,7 +149,8 @@ def upload_bag_s3(self,bag_name,source_path,s3_bucket,s3_location):
     s3_loc = "s3://{0}/{1}".format(s3_bucket,s3_location)
     task_id = str(upload_bag_s3.request.id)
     log=open("{0}.tmp".format(task_id),"w+")
-    status=call(['aws','s3','sync',source,s3_loc],stderr=log)
+    bin_path = os.path.split(os.path.abspath(sys.executable))[0]
+    status=call(['{0}/aws'.format(bin_path),'s3','sync',source,s3_loc],stderr=log)
     if status != 0:
         log.seek(0)
         msg= log.read()
