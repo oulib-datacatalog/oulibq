@@ -9,7 +9,7 @@ import os, hashlib, bagit
 #from pymongo import MongoClient
 import boto3,shutil,requests,json
 from pandas import read_csv
-#Default base directory 
+#Default base directory
 #basedir="/data/static/"
 from bag_migration import get_celery_worker_config
 import ConfigParser
@@ -48,12 +48,12 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,celery_q
         {
             "s3": {
                 "bucket": "ul-bagit"
-            }, 
+            },
             "nas": {
-                "bagit": "/mnt/nas/bagit", 
+                "bagit": "/mnt/nas/bagit",
                 "bagit2": "/mnt/nas/bagit2"
-            }, 
-            "celery_worker": "dev-mstacy", 
+            },
+            "celery_worker": "dev-mstacy",
             "norfile": {
                 "bagit": "/mnt/norfile/UL-BAGIT"
             }
@@ -77,7 +77,7 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,celery_q
     valid_bags=[]
     if bags:
         valid_bags=bags.split(',')
-    else: 
+    else:
         valid_bags=[name for name in os.listdir(norfile_bagit) if os.path.isdir("{0}/{1}".format(norfile_bagit,name))]
     #remove hidden folders
     valid_bags = [x for x in valid_bags if not x.startswith(('_','.'))]
@@ -88,7 +88,7 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,celery_q
     for bag in valid_bags:
         data = _api_get(bag)
         if data['count']>0:
-            inventory_metadata = data['results'][0] 
+            inventory_metadata = data['results'][0]
             update_cat+=1
         else:
             #new item to inventory
@@ -120,11 +120,11 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,celery_q
 @task()
 def validate_nas_files(bag_name,local_source_paths):
     """
-    Validation of NAS 
+    Validation of NAS
 
-    Agrs: 
+    Agrs:
         bag_name - string
-        local_source_paths - list of sources 
+        local_source_paths - list of sources
     """
     data = _api_get(bag_name)
     #db=MongoClient(mongo_host)
@@ -193,7 +193,7 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source')
     _api_save(inventory_metadata)
     return {'status':"SUCCESS",'args':[bag_name,local_source_path,s3_bucket],'s3':metadata}
     #return metadata
-    
+
 @task()
 def validate_norfile_bag(bag_name,local_source_path):
     """
@@ -240,7 +240,7 @@ def clean_nas_files():
             remove_nas_files(itm)
         except Exception as e:
             errors.append(itm)
-    bag_errors=",".join(errors)   
+    bag_errors=",".join(errors)
     return "Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ".format((len(subtasks)-len(errors)),len(errors),bag_errors)
 
 def remove_nas_files(bag_name):
@@ -250,7 +250,7 @@ def remove_nas_files(bag_name):
         bag_name
     """
     data = _api_get(bag_name)
-    itm = data['results'][0] 
+    itm = data['results'][0]
     if not itm['locations']['nas']['location']=="/" and len(itm['locations']['nas']['location'])>9:
         status=call(["rm","-rf",itm['locations']['nas']['location']])
         #Check status
@@ -268,13 +268,13 @@ def remove_nas_files(bag_name):
             raise Exception("Error removing files: {0}".format(itm['locations']['nas']['location']))
     else:
         raise Exception("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
-  
+
 def calculate_multipart_etag(source_path,etag, chunk_size=8):
 
     """
     calculates a multipart upload etag for amazon s3
     Arguments:
-        source_path -- The file to calculate the etag 
+        source_path -- The file to calculate the etag
         etag -- s3 etag to compare
     Keyword Arguments:
         chunk_size -- The chunk size to calculate for. Default 8
