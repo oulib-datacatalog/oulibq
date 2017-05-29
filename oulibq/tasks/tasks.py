@@ -70,7 +70,8 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,celery_q
     #Celery Worker storage connections
     celery_config = get_celery_worker_config('cc.lib.ou.edu')
     #set variables
-    nas_bagit=[celery_config['nas']['bagit2'],celery_config['nas']['bagit']]
+    #nas_bagit=[celery_config['nas']['bagit2'],celery_config['nas']['bagit']]
+    nas_bagit = celery_config['nas']['bagit2']
     norfile_bagit=celery_config['norfile']['bagit']
     s3_bucket=celery_config['s3']['bucket']
     #get list of bags from norfile
@@ -130,20 +131,24 @@ def validate_nas_files(bag_name,local_source_paths):
     #db=MongoClient(mongo_host)
     inventory_metadata = data['results'][0]
     #db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    location=0
-    for local_source_path in local_source_paths:
-        if os.path.isdir('{0}/{1}'.format(local_source_path,bag_name)):
-            inventory_metadata['locations']['nas']['exists']=True
-            inventory_metadata['locations']['nas']['place_holder']=False
-            inventory_metadata['locations']['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
-            location+=1
-        elif os.path.exists('{0}/{1}'.format(local_source_path,bag_name)):
-            inventory_metadata['locations']['nas']['exists']=False
-            inventory_metadata['locations']['nas']['place_holder']=True
-            inventory_metadata['locations']['nas']['location']='{0}/{1}'.format(local_source_path,bag_name)
-            location+=1
-    if location>1:
-        inventory_metadata['locations']['nas']['error']="Multiple nas locations"
+    #location=0
+    #for local_source_path in local_source_paths:
+    local_source_path=os.path.join(local_source_paths,bag_name)
+    if os.path.isdir(local_source_path):
+        inventory_metadata['locations']['nas']['exists']=True
+        inventory_metadata['locations']['nas']['place_holder']=False
+        inventory_metadata['locations']['nas']['location']=os.path.join(local_source_path,bag_name)
+        inventory_metadata['locations']['nas']['error']=""
+        #location+=1
+    elif os.path.exists(local_source_path):
+        inventory_metadata['locations']['nas']['exists']=False
+        inventory_metadata['locations']['nas']['place_holder']=True
+        inventory_metadata['locations']['nas']['location']=os.path.join(local_source_path,bag_name)
+        inventory_metadata['locations']['nas']['error']=""
+        #location+=1
+    #if location>1:
+    else:
+        inventory_metadata['locations']['nas']['error']="Bag Folder or placeholder not found."
     _api_save(inventory_metadata)
     #cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
     #cas['nas']=inventory_metadata['nas']
