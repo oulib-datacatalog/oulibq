@@ -67,15 +67,15 @@ def private_bags_migrate_s3(s3_bucket='ul-bagit',celery_queue="digilab-nas2-prod
     #All Private Bag Folders with in Norfile
     #Private
     s3_folder="private/private"
-    pvbags1 = _get_bags(norfile_bagit,s3_folder)
+    pvbags1 = _get_bags(norfile_bagit,"private")
     #preservation
     subtasks1,bag_names1=_gen_subtask_bags(pvbags1,norfile_bagit,s3_bucket,s3_folder,celery_queue)
     s3_folder="private/preservation"
-    pvbags2 = _get_bags(norfile_bagit,s3_folder)
+    pvbags2 = _get_bags(norfile_bagit,"preservation")
     subtasks2,bag_names2=_gen_subtask_bags(pvbags2,norfile_bagit,s3_bucket,s3_folder,celery_queue)
     #shareok
     s3_folder="private/shareok"
-    pvbags3 = _get_bags(norfile_bagit,s3_folder)
+    pvbags3 = _get_bags(norfile_bagit,"shareok")
     subtasks3,bag_names3=_gen_subtask_bags(pvbags3,norfile_bagit,s3_bucket,s3_folder,celery_queue)
     # Combine the 3 locations
     subtasks = subtasks1 + subtasks2+ subtasks3
@@ -108,11 +108,11 @@ def private_bags_migrate_norfile(olderThanDays=3,celery_queue="digilab-nas2-prod
     nas_bagit= celery_config['nas']['bagit']
     #get bags
     nas_folder="private/private"
-    pvbags1 = _get_bags1(nas_bagit,nas_folder)
+    pvbags1 = _get_bags1(nas_bagit,"private")
     nas_folder = "private/preservation"
-    pvbags2 = _get_bags1(nas_bagit,nas_folder)
+    pvbags2 = _get_bags1(nas_bagit,"preservation")
     nas_folder = "private/shareok"
-    pvbags3 = _get_bags1(nas_bagit,nas_folder)
+    pvbags3 = _get_bags1(nas_bagit,"shareok")
 
     bags= pvbags1 + pvbags2 + pvbags3
     #Time Variables
