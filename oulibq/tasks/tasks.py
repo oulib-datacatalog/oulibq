@@ -79,7 +79,7 @@ def digilab_inventory(bags=None,force=None,project=None,department=None,celery_q
     if bags:
         valid_bags=bags.split(',')
     else:
-        valid_bags=[name for name in os.listdir(norfile_bagit) if os.path.isdir("{0}/{1}".format(norfile_bagit,name))]
+        valid_bags=[name for name in os.listdir(norfile_bagit) if os.path.isdir(os.path.join(norfile_bagit,name,'data'))]
     #remove hidden folders
     valid_bags = [x for x in valid_bags if not x.startswith(('_','.'))]
     #variables
