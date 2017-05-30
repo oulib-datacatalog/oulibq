@@ -10,6 +10,7 @@ from pymongo import MongoClient
 import boto3,shutil,requests
 from pandas import read_csv
 from bag_migration import upload_bag_s3, copy_bag
+from tasks import _api_get,_api_save,validate_nas_files,validate_s3_files,validate_norfile_bag
 #Default base directory
 #basedir="/data/static/"
 from bag_migration import get_celery_worker_config
@@ -44,6 +45,56 @@ def _gen_subtask_bags(bags,source_path,s3_bucket,s3_folder,celery_queue):
                 subtasks.append(upload_bag_s3.subtask(args=(bag,source_path,s3_bucket,s3_location),queue=celery_queue))
                 bag_names.append(s3_location)
     return subtasks,bag_names
+@task()
+def private_digilab_inventory():
+    #Celery worker Config from Catalog
+    celery_config=get_celery_worker_config("not used")
+    #Norfile bag location
+    norfile_bagit=celery_config['norfile']['bagit']
+    #All Private Bag Folders with in Norfile
+    #Private
+    s3_folder="private"
+    pvbags1 = _get_bags1(norfile_bagit,s3_folder)
+    #preservation
+    s3_folder="preservation"
+    pvbags2 = _get_bags1(norfile_bagit,s3_folder)
+    #shareok
+    s3_folder="shareok"
+    pvbags3 = _get_bags1(norfile_bagit,s3_folder)
+    subtask=[]
+    bags = pvbags1 + pvbags2 + pvbags3
+    update_cat=0
+    new_cat=0
+    for bag in bags:
+        data = _api_get(bag)
+        if data['count']>0:
+            inventory_metadata = data['results'][0]
+            update_cat+=1
+        else:
+            #new item to inventory
+            inventory_metadata={ 'derivatives':{},'project':'','department':'', 'bag':bag,'locations':{
+                                's3':{'exists':False,'valid':False,'bucket':'','validation_date':'','manifest':'','verified':[],'error':[]},
+                                'norfile':{'exists':False,'valid':False,'validation_date':'','location':'UL-BAGIT'},
+                                'nas':{'exists':False,'place_holder':False,'location':''}}}
+            new_cat+=1
+        if project:
+            inventory_metadata['project']="private"
+        if department:
+            inventory_metadata['department']="Digilab"
+        #save inventory metadata
+        _api_save(inventory_metadata)
+        # norfile validation
+        if not inventory_metadata['locations']['norfile']['valid'] or force:
+            subtasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit),queue=celery_queue))
+        #  s3 validataion
+        if not inventory_metadata['locations']['s3']['valid'] or force:
+            subtasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket),kwargs={"s3_base_key":"private"},queue=celery_queue))
+        # nas validation
+        subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit),queue=celery_queue))
+    if subtasks:
+        job = TaskSet(tasks=subtasks)
+        result_set = job.apply_async()
+    return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,len(subtasks))
 
 @task()
 def private_bags_migrate_s3(s3_bucket='ul-bagit',celery_queue="digilab-nas2-prod-workerq",bags=None):
