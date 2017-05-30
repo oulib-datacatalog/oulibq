@@ -32,7 +32,7 @@ def _gen_subtask_bags(bags,source_path,s3_bucket,s3_folder,celery_queue):
         #double check to make sure not already in s3
         s3_location = os.path.join(s3_folder,bag)
         s3_location = s3_location.replace("//","/")
-        source_path = os.path.join(source_path,s3_location)
+        #source_path = os.path.join(source_path,s3_location)
         s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=s3_location ,MaxKeys=1)
         if not 'Contents' in s3_key:
             subtasks.append(upload_bag_s3.subtask(args=(bag,source_path,s3_bucket,s3_location),queue=celery_queue))
@@ -67,20 +67,21 @@ def private_bags_migrate_s3(s3_bucket='ul-bagit',celery_queue="digilab-nas2-prod
     #All Private Bag Folders with in Norfile
     #Private
     s3_folder="private"
-    pvbags1 = _get_bags(norfile_bagit,s3_folder)
+    pvbags1 = _get_bags1(norfile_bagit,s3_folder)
     #preservation
-    #subtasks1,bag_names1=_gen_subtask_bags(pvbags1,norfile_bagit,s3_bucket,os.path.join("private",s3_folder),celery_queue)
+    subtasks1,bag_names1=_gen_subtask_bags(pvbags1,norfile_bagit,s3_bucket,"private",celery_queue)
     s3_folder="preservation"
-    pvbags2 = _get_bags(norfile_bagit,s3_folder)
-    #subtasks2,bag_names2=_gen_subtask_bags(pvbags2,norfile_bagit,s3_bucket,os.path.join("private",s3_folder),celery_queue)
+    pvbags2 = _get_bags1(norfile_bagit,s3_folder)
+    subtasks2,bag_names2=_gen_subtask_bags(pvbags2,norfile_bagit,s3_bucket,"private",celery_queue)
     #shareok
     s3_folder="shareok"
-    pvbags3 = _get_bags(norfile_bagit,s3_folder)
-    #subtasks3,bag_names3=_gen_subtask_bags(pvbags3,norfile_bagit,s3_bucket,os.path.join("private",s3_folder),celery_queue)
+    pvbags3 = _get_bags1(norfile_bagit,s3_folder)
+    subtasks3,bag_names3=_gen_subtask_bags(pvbags3,norfile_bagit,s3_bucket,"private",celery_queue)
     # Combine the 3 locations
-    return pvbags1 + pvbags2 + pvbags3
-    subtasks = subtasks1 + subtasks2+ subtasks3
+    #return pvbags1 + pvbags2 + pvbags3
+    subtasks = subtasks1 + subtasks2 + subtasks3
     bag_names = bag_names1 + bag_names2 + bag_names3
+    return subtasks
     if subtasks:
         job = TaskSet(tasks=subtasks)
         result_set = job.apply_async()
