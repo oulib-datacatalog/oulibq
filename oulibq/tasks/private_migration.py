@@ -81,7 +81,7 @@ def private_bags_migrate_s3(s3_bucket='ul-bagit',celery_queue="digilab-nas2-prod
     #return pvbags1 + pvbags2 + pvbags3
     subtasks = subtasks1 + subtasks2 + subtasks3
     bag_names = bag_names1 + bag_names2 + bag_names3
-    return subtasks
+    #return subtasks
     if subtasks:
         job = TaskSet(tasks=subtasks)
         result_set = job.apply_async()
