@@ -69,15 +69,16 @@ def private_bags_migrate_s3(s3_bucket='ul-bagit',celery_queue="digilab-nas2-prod
     s3_folder="private"
     pvbags1 = _get_bags(norfile_bagit,s3_folder)
     #preservation
-    subtasks1,bag_names1=_gen_subtask_bags(pvbags1,norfile_bagit,s3_bucket,os.path.join("private",s3_folder),celery_queue)
+    #subtasks1,bag_names1=_gen_subtask_bags(pvbags1,norfile_bagit,s3_bucket,os.path.join("private",s3_folder),celery_queue)
     s3_folder="preservation"
     pvbags2 = _get_bags(norfile_bagit,s3_folder)
-    subtasks2,bag_names2=_gen_subtask_bags(pvbags2,norfile_bagit,s3_bucket,os.path.join("private",s3_folder),celery_queue)
+    #subtasks2,bag_names2=_gen_subtask_bags(pvbags2,norfile_bagit,s3_bucket,os.path.join("private",s3_folder),celery_queue)
     #shareok
     s3_folder="shareok"
     pvbags3 = _get_bags(norfile_bagit,s3_folder)
-    subtasks3,bag_names3=_gen_subtask_bags(pvbags3,norfile_bagit,s3_bucket,os.path.join("private",s3_folder),celery_queue)
+    #subtasks3,bag_names3=_gen_subtask_bags(pvbags3,norfile_bagit,s3_bucket,os.path.join("private",s3_folder),celery_queue)
     # Combine the 3 locations
+    return pvbags1 + pvbags2 + pvbags3
     subtasks = subtasks1 + subtasks2+ subtasks3
     bag_names = bag_names1 + bag_names2 + bag_names3
     if subtasks:
