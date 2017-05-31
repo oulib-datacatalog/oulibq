@@ -46,7 +46,7 @@ def _gen_subtask_bags(bags,source_path,s3_bucket,s3_folder,celery_queue):
                 bag_names.append(s3_location)
     return subtasks,bag_names
 @task()
-def private_digilab_inventory(force=False):
+def private_digilab_inventory(project="private",department="DigiLab",force=False):
     #Celery worker Config from Catalog
     celery_config=get_celery_worker_config("not used")
     #Norfile bag location
@@ -79,9 +79,9 @@ def private_digilab_inventory(force=False):
                                 'nas':{'exists':False,'place_holder':False,'location':''}}}
             new_cat+=1
         if project:
-            inventory_metadata['project']="private"
+            inventory_metadata['project']=project
         if department:
-            inventory_metadata['department']="Digilab"
+            inventory_metadata['department']=department
         #save inventory metadata
         _api_save(inventory_metadata)
         # norfile validation
