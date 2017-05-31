@@ -51,6 +51,7 @@ def private_digilab_inventory():
     celery_config=get_celery_worker_config("not used")
     #Norfile bag location
     norfile_bagit=celery_config['norfile']['bagit']
+    nas_bagit = celery_config['nas']['bagit']
     #All Private Bag Folders with in Norfile
     #Private
     s3_folder="private"
