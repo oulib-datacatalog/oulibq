@@ -66,6 +66,7 @@ def private_digilab_inventory(project="private",department="DigiLab",force=False
     bags = pvbags1 + pvbags2 + pvbags3
     update_cat=0
     new_cat=0
+    subtasks=[]
     for bag in bags:
         data = _api_get(bag)
         if data['count']>0:
