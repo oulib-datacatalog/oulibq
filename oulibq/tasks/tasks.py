@@ -137,13 +137,13 @@ def validate_nas_files(bag_name,local_source_paths):
     if os.path.isdir(local_source_path):
         inventory_metadata['locations']['nas']['exists']=True
         inventory_metadata['locations']['nas']['place_holder']=False
-        inventory_metadata['locations']['nas']['location']=os.path.join(local_source_path,bag_name)
+        inventory_metadata['locations']['nas']['location']=local_source_path
         inventory_metadata['locations']['nas']['error']=""
         #location+=1
     elif os.path.exists(local_source_path):
         inventory_metadata['locations']['nas']['exists']=False
         inventory_metadata['locations']['nas']['place_holder']=True
-        inventory_metadata['locations']['nas']['location']=os.path.join(local_source_path,bag_name)
+        inventory_metadata['locations']['nas']['location']=local_source_path
         inventory_metadata['locations']['nas']['error']=""
         #location+=1
     #if location>1:
