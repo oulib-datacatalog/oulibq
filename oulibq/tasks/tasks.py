@@ -13,6 +13,9 @@ from pandas import read_csv
 #basedir="/data/static/"
 from bag_migration import get_celery_worker_config
 import ConfigParser
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 def _get_config_parameter(group,param,config_file="cybercom.cfg"):
     config = ConfigParser.ConfigParser()
@@ -219,6 +222,7 @@ def validate_norfile_bag(bag_name,local_source_path):
             try:
                 inventory_metadata['locations']['norfile']['valid']=bag.validate(processes=4)
             except:
+                logging.error("Error validating bag: {0}".format(bag_name))
                 raise
     else:
         inventory_metadata['locations']['norfile']['exists']=False
@@ -270,8 +274,10 @@ def remove_nas_files(bag_name):
             itm['locations']['nas']['ERROR']="Error removing files: {0}".format(itm['locations']['nas']['location'])
             #Save metadata
             _api_save(itm)
+            logging.error("Error removing files: {0}".format(itm['locations']['nas']['location']))
             raise Exception("Error removing files: {0}".format(itm['locations']['nas']['location']))
     else:
+        logging.error("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
         raise Exception("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
 
 def calculate_multipart_etag(source_path,etag, chunk_size=8):
