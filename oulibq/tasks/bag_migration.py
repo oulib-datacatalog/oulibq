@@ -122,17 +122,15 @@ def copy_bag(self,bag_name,source_path,dest_path):
     """
     dest="{0}/{1}".format(dest_path,bag_name)
     source = "{0}/{1}".format(source_path,bag_name)
-    if os.path.isdir(dest):
-        msg = "Bag destination already exists. Host:{0} Destination: {1}".format(mounts_hostname,dest)
-        self.update_state(state=states.FAILURE,meta=msg)
-        raise Ignore()
-        #return "Bag destination already exists. Host:{0} Destination: {1}".format(mounts_hostname,dest)
     if not os.path.isdir(source):
         msg="Bag source directory does not exist. {0}".format(source)
         self.update_state(state=states.FAILURE,meta=msg)
         raise Ignore()
-    copy_tree(source, dest)
-    #shutil.copytree(source, dest)
+    if os.path.isdir(dest):
+        #Update Bag
+        copy_tree(source, dest)
+        return "Bag updated from {0} to {1}".format(source,dest)
+    shutil.copytree(source, dest)
     return "Bag copied from {0} to {1}".format(source,dest)
 
 @task(bind=True)
