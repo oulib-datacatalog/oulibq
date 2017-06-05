@@ -11,7 +11,7 @@ import boto3,shutil,requests
 from pandas import read_csv
 #Default base directory
 #basedir="/data/static/"
-
+from distutils.dir_util import copy_tree
 
 def get_celery_worker_config(api_host):
     #check if environ vars are available
@@ -131,7 +131,8 @@ def copy_bag(self,bag_name,source_path,dest_path):
         msg="Bag source directory does not exist. {0}".format(source)
         self.update_state(state=states.FAILURE,meta=msg)
         raise Ignore()
-    shutil.copytree(source, dest)
+    copy_tree(source, dest)
+    #shutil.copytree(source, dest)
     return "Bag copied from {0} to {1}".format(source,dest)
 
 @task(bind=True)

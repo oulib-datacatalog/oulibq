@@ -178,7 +178,12 @@ def private_bags_migrate_norfile(olderThanDays=3,celery_queue="digilab-nas2-prod
     bag_names=[]
     for bag in bags:
         if  (present - os.path.getmtime(os.path.join(nas_bagit, bag))) > olderThanDays:
-            if not os.path.isdir(os.path.join(norfile_bagit,bag)):
+            data = _api_get(bag)
+            if data['count']>0:
+                data = data['results'][0]["locations"]["norfile"]["valid"]
+            else:
+                data = True
+            if not os.path.isdir(os.path.join(norfile_bagit,bag)) or not data:
                 subtasks.append(copy_bag.subtask(args=(bag,nas_bagit,norfile_bagit),queue=celery_queue))
                 bag_names.append(bag)
     if subtasks:
