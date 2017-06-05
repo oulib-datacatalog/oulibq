@@ -2,7 +2,7 @@
 #ez_setup.use_setuptools()
 from setuptools import setup, find_packages
 setup(name='oulibq',
-      version='0.1.6.8',
+      version='0.1.6.9',
       packages= find_packages(),
       install_requires=[
           'celery==3.1.22',
