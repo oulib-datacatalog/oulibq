@@ -9,7 +9,7 @@ import os, hashlib, bagit,time,sys
 from pymongo import MongoClient
 import boto3,shutil,requests
 from pandas import read_csv
-from cStringIO import StringIO
+#from cStringIO import StringIO
 #Default base directory
 #basedir="/data/static/"
 from distutils.dir_util import copy_tree
@@ -127,15 +127,18 @@ def copy_bag(self,bag_name,source_path,dest_path):
         msg="Bag source directory does not exist. {0}".format(source)
         self.update_state(state=states.FAILURE,meta=msg)
         raise Ignore()
-    log=StringIO()
+    task_id = str(copy_bag.request.id)
+    log=open("{0}.tmp".format(task_id),"w+")
     status=call(['rsync','-rltD',source,dest],stderr=log)
     if status != 0:
-        msg= log.getvalue()
+        log.seek(0)
+        msg= log.read()
         log.close()
         self.update_state(state=states.FAILURE,meta=msg)
         raise Ignore()
     
     msg="Bag copied from {0} to {1}".format(source,dest)
+    log.close()
     log.close()
     return msg
 
