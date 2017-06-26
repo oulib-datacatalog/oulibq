@@ -9,6 +9,7 @@ import os, hashlib, bagit,time,sys
 from pymongo import MongoClient
 import boto3,shutil,requests
 from pandas import read_csv
+from cStringIO import StringIO
 #Default base directory
 #basedir="/data/static/"
 from distutils.dir_util import copy_tree
@@ -126,12 +127,17 @@ def copy_bag(self,bag_name,source_path,dest_path):
         msg="Bag source directory does not exist. {0}".format(source)
         self.update_state(state=states.FAILURE,meta=msg)
         raise Ignore()
-    if os.path.isdir(dest):
-        #Update Bag
-        copy_tree(source, dest)
-        return "Bag updated from {0} to {1}".format(source,dest)
-    shutil.copytree(source, dest)
-    return "Bag copied from {0} to {1}".format(source,dest)
+    log=StringIO()
+    status=call(['rsync','-rltD',source,dest],stderr=log)
+    if status != 0:
+        msg= log.getvalue()
+        log.close()
+        self.update_state(state=states.FAILURE,meta=msg)
+        raise Ignore()
+    
+    msg="Bag copied from {0} to {1}".format(source,dest)
+    log.close()
+    return msg
 
 @task(bind=True)
 def upload_bag_s3(self,bag_name,source_path,s3_bucket,s3_location):
