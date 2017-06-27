@@ -255,7 +255,7 @@ def clean_nas_files():
 @task()
 def clean_up(bag_name):
     if not bag_name=="/" and len(bag_name)>9:
-        status=call(["rm","-rf",bag_name)
+        status=call(["rm","-rf",bag_name])
         if status==0:
             return "location cleaned: {0}".format(bag_name)
         else:
@@ -264,6 +264,7 @@ def clean_up(bag_name):
     else:
         logging.error("Suspicious Bag location: Security Error - {0}".format(bag_name))
         raise Exception("Suspicious Bag location: Security Error - {0}".format(bag_name))
+
 def remove_nas_files(bag_name):
     """
     Remove NAS bag
