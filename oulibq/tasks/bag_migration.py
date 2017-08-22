@@ -121,7 +121,11 @@ def copy_bag(self,bag_name,source_path,dest_path):
             source_path - string source path to NAS location. Do not include bag name in variable.
             dest_path - string destination path to Norfile location. Do not include bag name in variable.
     """
-    dest=os.path.join(dest_path,bag_name)
+    baglist=bag_name.split('/')
+    if len(baglist)>1:
+        dest=os.path.join(dest_path,baglist[0])
+    else:
+        dest=dest_path
     source = os.path.join(source_path,bag_name)
     if not os.path.isdir(source):
         msg="Bag source directory does not exist. {0}".format(source)
