@@ -152,7 +152,13 @@ def validate_nas_files(bag_name,local_source_paths):
     #if location>1:
     else:
         inventory_metadata['locations']['nas']['error']="Bag Folder or placeholder not found."
-    _api_save(inventory_metadata)
+    #save metadata
+    #make sure data is fresh and no overright of metadata
+    data = _api_get(bag_name)
+    save_meta =data['results'][0]
+    save_meta['locations']['nas'] = inventory_metadata['locations']['nas']
+    _api_save(save_meta)
+    #_api_save(inventory_metadata)
     #cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
     #cas['nas']=inventory_metadata['nas']
     #db.catalog.bagit_inventory.save(cas)
@@ -198,7 +204,11 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source')
         metadata['exists']=False
     inventory_metadata['locations']['s3']=metadata
     #Save metadata
-    _api_save(inventory_metadata)
+    #make sure data is fresh and no overright of metadata
+    data = _api_get(bag_name)
+    save_meta =data['results'][0]
+    save_meta['locations']['s3'] = metadata
+    _api_save(save_meta)
     return {'status':"SUCCESS",'args':[bag_name,local_source_path,s3_bucket],'s3':metadata}
     #return metadata
 
@@ -228,7 +238,11 @@ def validate_norfile_bag(bag_name,local_source_path):
         inventory_metadata['locations']['norfile']['exists']=False
         inventory_metadata['locations']['norfile']['valid']=False
     #Save metadata
-    _api_save(inventory_metadata)
+    #make sure data is fresh and no overright of metadata
+    data = _api_get(bag_name)
+    save_meta =data['results'][0]
+    save_meta['locations']['norfile'] = inventory_metadata['locations']['norfile']
+    _api_save(save_meta)
     return {'status':"SUCCESS",'args':[bag_name,local_source_path],'norfile':inventory_metadata['locations']['norfile']}
 
 @task()
