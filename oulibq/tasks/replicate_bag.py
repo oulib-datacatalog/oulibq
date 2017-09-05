@@ -38,7 +38,7 @@ def _find_bag(bag):
     Function returns path to nas and norfile on current worker. Determines if bag is on Nas1 or Nas2.
     returns NAS Path , Norfile Path, S3 Bucket
     """
-    nas_config= get_celery_worker_config()
+    nas_config= get_celery_worker_config("deprecated-value")
     if os.path.isdir(os.path.join(nas_config["nas"]["bagit"],bag)):
         nas_path = nas_config["nas"]["bagit"]
     elif os.path.isdir(os.path.join(nas_config["nas"]["bagit2"],bag)):
