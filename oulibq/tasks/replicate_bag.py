@@ -61,14 +61,12 @@ def replicate_bag(bag, project=None, department=None, force=None, celery_queue="
     data = _api_get(bag)
     if data['count']>0:
         inventory_metadata = data['results'][0]
-        update_cat+=1
     else:
         #new item to inventory
         inventory_metadata={ 'derivatives':{},'project':'','department':'', 'bag':bag,'locations':{
                             's3':{'exists':False,'valid':False,'bucket':'','validation_date':'','manifest':'','verified':[],'error':[]},
                             'norfile':{'exists':False,'valid':False,'validation_date':'','location':'UL-BAGIT'},
                             'nas':{'exists':False,'place_holder':False,'location':''}}}
-        new_cat+=1
     if project:
         inventory_metadata['project']=project
     if department:
