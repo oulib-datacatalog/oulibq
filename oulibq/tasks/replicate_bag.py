@@ -88,11 +88,11 @@ def replicate_bag(bag, project=None, department=None, force=None, celery_queue="
     subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit),queue=celery_queue))
     
     if len(bag_chain)==2:        
-        cp_val_chain = (bag_chain[0] | bag_chain[1] | group(subtasks)|clean_nas_files.si(queue=celery_queue))()
+        cp_val_chain = (bag_chain[0] | bag_chain[1] | group(subtasks)|clean_nas_files.si(args=(),kwargs={},queue=celery_queue))()
     elif len(bag_chain)==1:
-        cp_val_chain = (bag_chain[0] |  group(subtasks)|clean_nas_files.si(queue=celery_queue))()
+        cp_val_chain = (bag_chain[0] |  group(subtasks)|clean_nas_files.si(args=(),kwargs={},queue=celery_queue))()
     else:
-        cp_val_chain = (group(subtasks) | clean_nas_files.si(queue=celery_queue))()
+        cp_val_chain = (group(subtasks) | clean_nas_files.si(args=(),kwargs={},queue=celery_queue))()
 
     return "Replication workflow started for bag {0}. Please see child subtasks for workflow result.".format(bag)
 
