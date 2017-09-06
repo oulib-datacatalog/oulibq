@@ -49,7 +49,7 @@ def _find_bag(bag):
         s3_folder="private"
     else:
         s3_folder="source"
-    return nas_path, nas_config["norfile"]["bagit"],nas_config["s3"]["bucket"],os.path.join(s3_folder,bag)
+    return nas_path, nas_config["norfile"]["bagit"],nas_config["s3"]["bucket"],os.path.join(s3_folder,bag),s3_folder
         
 @task()
 def replicate_bag(bag, project=None, department=None, force=None, celery_queue="digilab-nas2-prod-workerq"):
@@ -57,7 +57,7 @@ def replicate_bag(bag, project=None, department=None, force=None, celery_queue="
 
     """
     # Check to see if bag exists
-    nas_bagit,norfile_bagit,s3_bucket,s3_key =  _find_bag(bag)
+    nas_bagit,norfile_bagit,s3_bucket,s3_key,s3_folder =  _find_bag(bag)
     data = _api_get(bag)
     if data['count']>0:
         inventory_metadata = data['results'][0]
@@ -83,7 +83,7 @@ def replicate_bag(bag, project=None, department=None, force=None, celery_queue="
     #  s3 validataion
     if not inventory_metadata['locations']['s3']['valid'] or force:
         bag_chain.append(upload_bag_s3.si(bag,nas_bagit,s3_bucket,s3_key).set(queue=celery_queue))
-        subtasks.append(validate_s3_files.si(bag,norfile_bagit,s3_bucket).set(queue=celery_queue))
+        subtasks.append(validate_s3_files.si(bag,norfile_bagit,s3_bucket,s3_base_key=s3_folder).set(queue=celery_queue))
     # nas validation
     subtasks.append(validate_nas_files.si(bag,nas_bagit).set(queue=celery_queue))
     
