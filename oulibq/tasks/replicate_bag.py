@@ -78,7 +78,7 @@ def replicate_bag(bag, project=None, department=None, force=None, celery_queue="
     
     # norfile validation
     if not inventory_metadata['locations']['norfile']['valid'] or force:
-        bag_chain.append(copy_bag.si(args=(bag,nas_bagit,norfile_bagit),queue=celery_queue)) 
+        bag_chain.append(copy_bag.si(args=(bag,nas_bagit,norfile_bagit))) 
         subtasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit),queue=celery_queue))
     #  s3 validataion
     if not inventory_metadata['locations']['s3']['valid'] or force:
@@ -88,11 +88,11 @@ def replicate_bag(bag, project=None, department=None, force=None, celery_queue="
     subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit),queue=celery_queue))
     
     if len(bag_chain)==2:        
-        cp_val_chain = (bag_chain[0] | bag_chain[1] | group(subtasks)|clean_nas_files.si(args=(),kwargs={},queue=celery_queue))()
+        cp_val_chain = (bag_chain[0].apply_async(queue=celery_queue) | bag_chain[1].apply_async(queue=celery_queue) | group(subtasks).apply_async(queue=celery_queue)|clean_nas_files.si().apply_async(queue=celery_queue))()
     elif len(bag_chain)==1:
-        cp_val_chain = (bag_chain[0] |  group(subtasks)|clean_nas_files.si(args=(),kwargs={},queue=celery_queue))()
+        cp_val_chain = (bag_chain[0].apply_async(queue=celery_queue) |  group(subtasks).apply_async(queue=celery_queue)|clean_nas_files.si().apply_async(queue=celery_queue))()
     else:
-        cp_val_chain = (group(subtasks) | clean_nas_files.si(args=(),kwargs={},queue=celery_queue))()
+        cp_val_chain = (group(subtasks).apply_async(queue=celery_queue) | clean_nas_files.si().apply_async(queue=celery_queue))()
 
     return "Replication workflow started for bag {0}. Please see child subtasks for workflow result.".format(bag)
 
