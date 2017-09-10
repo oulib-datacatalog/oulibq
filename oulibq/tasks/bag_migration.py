@@ -129,8 +129,9 @@ def copy_bag(self,bag_name,source_path,dest_path):
     source = os.path.join(source_path,bag_name)
     if not os.path.isdir(source):
         msg="Bag source directory does not exist. {0}".format(source)
-        self.update_state(state=states.FAILURE,meta=msg)
-        raise Ignore()
+        raise Exception(msg)
+        #self.update_state(state=states.FAILURE,meta=msg)
+        #raise Ignore()
     task_id = str(copy_bag.request.id)
     log=open("{0}.tmp".format(task_id),"w+")
     status=call(['rsync','-rltD','--delete',source,dest],stderr=log)
@@ -158,6 +159,9 @@ def upload_bag_s3(self,bag_name,source_path,s3_bucket,s3_location):
             s3_location (string): key within bucket. Example - 'source/Baldi_1706'
     """
     source ="{0}/{1}".format(source_path,bag_name)
+    if not os.path.isdir(source):
+        msg="Bag source directory does not exist. {0}".format(source)
+        raise Exception(msg)
     s3_loc = "s3://{0}/{1}".format(s3_bucket,s3_location)
     task_id = str(upload_bag_s3.request.id)
     log=open("{0}.tmp".format(task_id),"w+")
