@@ -116,7 +116,7 @@ def _filterbags(bags,order,bagspergroup=2):
         return bags,[]
 
 @task()
-def managed_replication(number_of_tasks=15):
+def managed_replication(number_of_tasks=15,celery_queue="digilab-nas2-prod-workerq"):
     """
     Task checks both NAS Locations and creates a celery group of replicate_bag subtasks.
     kwargs:
@@ -157,7 +157,7 @@ def managed_replication(number_of_tasks=15):
     #Create subtasks
     subtasks=[]
     for bag in tasks:
-        subtasks.append(replicate_bag.si(bag))
+        subtasks.append(replicate_bag.si(bag).set(queue=celery_queue))
     #submit group of tasks
     group(subtasks)()
     return "Replication workflow started: {0}, Bags: {1}   Remaining Bags to replicate {2}".format(len(tasks),tasks,len(remaining))
