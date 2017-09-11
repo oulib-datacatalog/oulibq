@@ -42,86 +42,6 @@ def _api_save(data):
     return True
 
 @task()
-def digilab_inventory(bags=None,force=None,project=None,department=None,celery_queue="digilab-nas2-prod-workerq"):
-    """
-    DigiLab Inventory Task
-    *REQUIRED*
-    1. Catalog must contain Celery worker config. Default celery_worker = "dev-mstacy".
-       Default Configuration
-        {
-            "s3": {
-                "bucket": "ul-bagit"
-            },
-            "nas": {
-                "bagit": "/mnt/nas/bagit",
-                "bagit2": "/mnt/nas/bagit2"
-            },
-            "celery_worker": "dev-mstacy",
-            "norfile": {
-                "bagit": "/mnt/norfile/UL-BAGIT"
-            }
-        }
-    2. AWS CLI client is required and credentials configured!
-    *PARAMETERS*
-    1. args: None
-    2. kwargs:
-        bags=None #comma separated string with bag names to inventory.
-        force=None #if None then valid components will not be inventory. If not None will re-inventory all bag components
-        project= None # add project metadata
-        department= None # add project Department information
-    """
-    #Celery Worker storage connections
-    celery_config = get_celery_worker_config('cc.lib.ou.edu')
-    #set variables
-    #nas_bagit=[celery_config['nas']['bagit2'],celery_config['nas']['bagit']]
-    nas_bagit = celery_config['nas']['bagit2']
-    norfile_bagit=celery_config['norfile']['bagit']
-    s3_bucket=celery_config['s3']['bucket']
-    #get list of bags from norfile
-    valid_bags=[]
-    if bags:
-        valid_bags=bags.split(',')
-    else:
-        valid_bags=[name for name in os.listdir(norfile_bagit) if os.path.isdir(os.path.join(norfile_bagit,name,'data'))]
-    #remove hidden folders
-    valid_bags = [x for x in valid_bags if not x.startswith(('_','.'))]
-    #variables
-    subtasks=[]
-    new_cat=0
-    update_cat=0
-    for bag in valid_bags:
-        data = _api_get(bag)
-        if data['count']>0:
-            inventory_metadata = data['results'][0]
-            update_cat+=1
-        else:
-            #new item to inventory
-            inventory_metadata={ 'derivatives':{},'project':'','department':'', 'bag':bag,'locations':{
-                                's3':{'exists':False,'valid':False,'bucket':'','validation_date':'','manifest':'','verified':[],'error':[]},
-                                'norfile':{'exists':False,'valid':False,'validation_date':'','location':'UL-BAGIT'},
-                                'nas':{'exists':False,'place_holder':False,'location':''}}}
-            new_cat+=1
-        if project:
-            inventory_metadata['project']=project
-        if department:
-            inventory_metadata['department']=department
-        #save inventory metadata
-        _api_save(inventory_metadata)
-        # norfile validation
-        if not inventory_metadata['locations']['norfile']['valid'] or force:
-            subtasks.append(validate_norfile_bag.subtask(args=(bag,norfile_bagit),queue=celery_queue))
-        #  s3 validataion
-        if not inventory_metadata['locations']['s3']['valid'] or force:
-            subtasks.append(validate_s3_files.subtask(args=(bag,norfile_bagit,s3_bucket),queue=celery_queue))
-        # nas validation
-        subtasks.append(validate_nas_files.subtask(args=(bag,nas_bagit),queue=celery_queue))
-    if subtasks:
-        job = TaskSet(tasks=subtasks)
-        result_set = job.apply_async()
-    return "Bag Inventory: {0} New, {1} Updates. {2} subtasks submitted".format(new_cat,update_cat,len(subtasks))
-
-
-@task()
 def validate_nas_files(bag_name,local_source_paths):
     """
     Validation of NAS
@@ -158,10 +78,6 @@ def validate_nas_files(bag_name,local_source_paths):
     save_meta =data['results'][0]
     save_meta['locations']['nas'] = inventory_metadata['locations']['nas']
     _api_save(save_meta)
-    #_api_save(inventory_metadata)
-    #cas=db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    #cas['nas']=inventory_metadata['nas']
-    #db.catalog.bagit_inventory.save(cas)
     return {'status':"SUCCESS",'args':[bag_name,local_source_paths],'nas':inventory_metadata['locations']['nas']}
 
 @task()
@@ -262,8 +178,8 @@ def clean_nas_files():
         try:
             remove_nas_files(itm)
         except Exception as e:
-            errors.append(itm)
-    bag_errors=",".join(errors)
+            errors.append(str(e))
+    bag_errors=",  ".join(errors)
     return "Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ".format((len(subtasks)-len(errors)),len(errors),bag_errors)
 
 def remove_nas_files(bag_name):
@@ -274,22 +190,23 @@ def remove_nas_files(bag_name):
     """
     data = _api_get(bag_name)
     itm = data['results'][0]
-    if not itm['locations']['nas']['location']=="/" and len(itm['locations']['nas']['location'])>9:
-        status=call(["rm","-rf",itm['locations']['nas']['location']])
-        #Check status
-        if status == 0:
+    if not itm['locations']['nas']['location']=="/" and len(itm['locations']['nas']['location'])>15:
+        try:
+            shutil.rmtree(itm['locations']['nas']['location'])
             itm['locations']['nas']['exists']=False
             itm['locations']['nas']['place_holder']=True
             #create placeholder
             open(itm['locations']['nas']['location'], 'a').close()
             #Save metadata
             _api_save(itm)
-        else:
-            itm['locations']['nas']['ERROR']="Error removing files: {0}".format(itm['locations']['nas']['location'])
+        except Exception as e:
+            msg = "Error removing files: {0}. {1}".format(itm['locations']['nas']['location'],str(e))
+            itm['locations']['nas']['ERROR']=msg
             #Save metadata
             _api_save(itm)
-            logging.error("Error removing files: {0}".format(itm['locations']['nas']['location']))
-            raise Exception("Error removing files: {0}".format(itm['locations']['nas']['location']))
+            logging.error(msg)
+            raise Exception(msg)
+        #status=call(["rm","-rf",itm['locations']['nas']['location']])
     else:
         logging.error("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
         raise Exception("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
