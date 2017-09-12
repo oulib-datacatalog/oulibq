@@ -1,5 +1,5 @@
 from celery.task import task
-import os,requests,json
+import os,sys,boto3,requests,json
 from bag_migration import get_celery_worker_config,copy_bag,upload_bag_s3
 from tasks import clean_nas_files,validate_nas_files,validate_s3_files,validate_norfile_bag
 import ConfigParser
@@ -45,7 +45,7 @@ def _find_bag(bag):
     elif os.path.isdir(os.path.join(nas_config["nas"]["bagit2"],bag)):
         nas_path = nas_config["nas"]["bagit2"]
     else:
-        raise Exception("Checked both NAS location and unable to find bag:{0}. This task runs rsync. Do not want to run if NAS already deleted and place holder exists.".format(bag))
+        raise Exception("Checked both NAS location and unable to find bag:{0}.".format(bag))
     if "private" in bag or "preservation" in bag or "shareok" in bag:
         s3_folder="private"
     else:
@@ -161,12 +161,13 @@ def managed_replication(number_of_tasks=15,celery_queue="digilab-nas2-prod-worke
     #submit group of tasks
     group(subtasks)()
     return "Replication workflow started: {0}, Bags: {1}   Remaining Bags to replicate {2}".format(len(tasks),tasks,len(remaining))
-        
-def replicated_bag_mv(bag,bag_dest):
+
+@task()       
+def replicated_bag_mv(bag,bag_dest,s3_bucket="ul-bagit"):
     """
         args:
-            bag (bag name or path to bag: bagname or preservation/bagname or shareok/bagname or private/bagename)
-            bag_dest (bagname shareok/bagname or private/bagename or preservation/bagname) 
+            bag (bagname or path to bag: bagname or preservation/bagname or shareok/bagname or private/bagename)
+            bag_dest (bagname or shareok/bagname or private/bagename or preservation/bagname) 
     """
     data = _api_get(bag)
     inventory_metadata=None
@@ -175,18 +176,37 @@ def replicated_bag_mv(bag,bag_dest):
     else:
         raise Exception("Bag was not found within data catalog")
     #Check that replication has completed
-    if inventory_metadata['locations']['nas']['exists'] or not inventory_metadata['locations']['norfile']['valid'] or not inventory_metadata['locations']['s3']['valid']:
-        raise Exception("Initial replication process is not complete. Please finish process then run this task again.")
-
+    if inventory_metadata['locations']['nas']['exists']:
+        raise Exception("Initial replication process is not complete. Please finish replication process and run the task again.")
+    #Set s3_location
+    s3 = boto3.client('s3')
+    s3_key = s3.list_objects(Bucket=s3_bucket, Prefix="{0}/{1}".format(s3_base_key,bag_name),MaxKeys=1)
+    if 'Contents' in s3.list_objects(Bucket=s3_bucket, Prefix="{0}/{1}".format("private",bag),MaxKeys=1):
+        s3_location = "s3://{0}/{1}/{2}".format(s3_bucket,"private",bag)
+    elif 'Contents' in s3.list_objects(Bucket=s3_bucket, Prefix="{0}/{1}".format("source",bag),MaxKeys=1):
+        s3_location = "s3://{0}/{1}/{2}".format(s3_bucket,"source",bag)
+    else:
+        raise Exception("S3 key not found for private/{0} and source/{0}".format(bag))
+    # Set s3_dest
+    if '/' in bag_dest:
+        s3_dest="s3://{0}/{1}/{2}".format(s3_bucket,"private",bag_dest)
+    else:
+        s3_dest="s3://{0}/{1}/{2}".format(s3_bucket,"source",bag_dest)
     # Norfile move operation
-    if 'shareok/' in bag_dest or 'preservation/' in bag_dest or 'private/' in bag_dest or len(bag_dest.split('/'))<=2:
-        nas_config= get_celery_worker_config("deprecated-value")
-        source = os.path.join(nas_config["norfile"]["bagit"],bag)
-        dest = os.path.join(nas_config["norfile"]["bagit"],bag_dest) 
-        return "{0} - {1}".format(source, dest)
-        # mv or rename bag
-        #call(['mv',source, dest])
-        #raise 
-
-
-
+    nas_config= get_celery_worker_config("deprecated-value")
+    source = os.path.join(nas_config["norfile"]["bagit"],bag)
+    dest = os.path.join(nas_config["norfile"]["bagit"],bag_dest) 
+    shutil.move(source,dest)
+    # AWS move operation
+    task_id = str(replicated_bag_mv.request.id)
+    log=open("{0}.tmp".format(task_id),"w+")
+    bin_path = os.path.split(os.path.abspath(sys.executable))[0]
+    status=call(['{0}/aws'.format(bin_path),'s3','mv','--recursive',s3_location,s3_dest],stderr=log)
+    if status != 0:
+        log.seek(0)
+        msg= log.read()
+        log.close()
+        os.remove("{0}.tmp".format(task_id))
+        raise Exception("Norfile mv {0} to {1}. S3 error: {2}".format(source,dest,msg))
+    os.remove("{0}.tmp".format(task_id))    
+    return "Success Norfile mv {0} to {1}, S3 {2} {3}".format(source,dest,s3_location,s3_dest)
