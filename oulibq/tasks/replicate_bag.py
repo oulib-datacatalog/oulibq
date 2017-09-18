@@ -1,5 +1,5 @@
 from celery.task import task
-import os,sys,boto3,requests,json
+import os,sys,boto3,requests,json,time
 from bag_migration import get_celery_worker_config,copy_bag,upload_bag_s3
 from tasks import clean_nas_files,validate_nas_files,validate_s3_files,validate_norfile_bag
 import ConfigParser
@@ -52,10 +52,11 @@ def _find_bag(bag):
         s3_folder="source"
     return nas_path, nas_config["norfile"]["bagit"],nas_config["s3"]["bucket"],os.path.join(s3_folder,bag),s3_folder
 
-def _get_bags(path,folder):
-    #s3_folder="private/private"
+def _get_bags(path,folder, days2wait=2):
+    now = time.time()
     pvlocation=os.path.join(path,folder)
-    return [os.path.join(folder,name) for name in os.listdir(pvlocation) if os.path.isdir(os.path.join(pvlocation, name,'data'))]
+    #Check if bag and older than days2wait
+    return [os.path.join(folder,name) for name in os.listdir(pvlocation) if os.path.isdir(os.path.join(pvlocation, name,'data')) and os.stat(os.path.join(pvlocation, name)).st_mtime < now - days2wait * 86400]
         
 @task()
 def replicate_bag(bag, project=None, department=None, force=None, celery_queue="digilab-nas2-prod-workerq"):
@@ -180,7 +181,6 @@ def replicated_bag_mv(bag,bag_dest,s3_bucket="ul-bagit"):
         raise Exception("Initial replication process is not complete. Please finish replication process and run the task again.")
     #Set s3_location
     s3 = boto3.client('s3')
-    s3_key = s3.list_objects(Bucket=s3_bucket, Prefix="{0}/{1}".format(s3_base_key,bag_name),MaxKeys=1)
     if 'Contents' in s3.list_objects(Bucket=s3_bucket, Prefix="{0}/{1}".format("private",bag),MaxKeys=1):
         s3_location = "s3://{0}/{1}/{2}".format(s3_bucket,"private",bag)
     elif 'Contents' in s3.list_objects(Bucket=s3_bucket, Prefix="{0}/{1}".format("source",bag),MaxKeys=1):
@@ -207,6 +207,6 @@ def replicated_bag_mv(bag,bag_dest,s3_bucket="ul-bagit"):
         msg= log.read()
         log.close()
         os.remove("{0}.tmp".format(task_id))
-        raise Exception("Norfile mv {0} to {1}. S3 error: {2}".format(source,dest,msg))
+        raise Exception("Norfile move {0} to {1}. S3 error: {2}".format(source,dest,msg))
     os.remove("{0}.tmp".format(task_id))    
-    return "Success Norfile mv {0} to {1}, S3 {2} {3}".format(source,dest,s3_location,s3_dest)
+    return "Success Norfile move {0} to {1}, S3 {2} {3}".format(source,dest,s3_location,s3_dest)

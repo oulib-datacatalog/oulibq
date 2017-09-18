@@ -191,6 +191,9 @@ def remove_nas_files(bag_name):
     data = _api_get(bag_name)
     itm = data['results'][0]
     if not itm['locations']['nas']['location']=="/" and len(itm['locations']['nas']['location'])>15:
+        if not itm['locations']['nas']['exists']:
+            raise Exception("Bag: {0} has already been removed".format(bag_name))
+             
         try:
             shutil.rmtree(itm['locations']['nas']['location'])
             itm['locations']['nas']['exists']=False
