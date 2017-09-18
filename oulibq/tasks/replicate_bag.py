@@ -117,7 +117,7 @@ def _filterbags(bags,order,bagspergroup=2):
         return bags,[]
 
 @task()
-def managed_replication(number_of_tasks=15,celery_queue="digilab-nas2-prod-workerq"):
+def managed_replication(number_of_tasks=15,days2wait=2,celery_queue="digilab-nas2-prod-workerq"):
     """
     Task checks both NAS Locations and creates a celery group of replicate_bag subtasks.
     kwargs:
@@ -140,11 +140,11 @@ def managed_replication(number_of_tasks=15,celery_queue="digilab-nas2-prod-worke
     nas2= nas_config["nas"]["bagit2"]
     for loc in ["preservation","private","shareok",""]:
         #nas1
-        temp,tempremain = _filterbags(_get_bags(nas1,loc),order)
+        temp,tempremain = _filterbags(_get_bags(nas1,loc,days2wait=days2wait),order)
         tasks=tasks + temp
         remaining= remaining + tempremain
         #nas2
-        temp,tempremain = _filterbags(_get_bags(nas2,loc),order)
+        temp,tempremain = _filterbags(_get_bags(nas2,loc,days2wait=days2wait),order)
         tasks=tasks + temp
         remaining= remaining + tempremain
     # Check if add remaining tasks
