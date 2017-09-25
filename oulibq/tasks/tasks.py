@@ -162,13 +162,17 @@ def validate_norfile_bag(bag_name,local_source_path):
     return {'status':"SUCCESS",'args':[bag_name,local_source_path],'norfile':inventory_metadata['locations']['norfile']}
 
 @task()
-def clean_nas_files():
+def clean_nas_files(bag=None):
     """
     Clean NAS files is a task that checks the bagit inventory catalog for bags that can be deleted from NAS
 
     """
-    #return all digital objects
-    data = _api_get("test",return_all=True)
+    #Check if only one bag 
+    if bag:
+        data = _api_get(bag)
+    else:
+        #return all digital objects
+        data = _api_get("test",return_all=True)
     subtasks=[]
     errors=[]
     for itm in data['results']:
