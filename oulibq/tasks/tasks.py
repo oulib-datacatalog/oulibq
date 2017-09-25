@@ -203,6 +203,9 @@ def remove_nas_files(bag_name):
             #Save metadata
             _api_save(itm)
         except Exception as e:
+            #pull metadata to prevent lose of metadata
+            data = _api_get(bag_name)
+            itm = data['results'][0]
             msg = "Error removing files: {0}. {1}".format(itm['locations']['nas']['location'],str(e))
             itm['locations']['nas']['ERROR']=msg
             #Save metadata
