@@ -8,6 +8,7 @@ from subprocess import call,STDOUT
 import os, hashlib, bagit
 #from pymongo import MongoClient
 import boto3,shutil,requests,json
+from botocore.exceptions import ClientError
 from pandas import read_csv
 #Default base directory
 #basedir="/data/static/"
@@ -109,7 +110,12 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source')
         for index, row in data.iterrows():
             bucket_key ="{0}/{1}/{2}".format(s3_base_key,bag_name,row.filename)
             local_bucket_key = "{0}/{1}".format(bag_name,row.filename)
-            etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
+            try:
+                etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
+            except ClientError:
+                errormsg = "Failed to get S3 object header for key: {0}".format(bucket_key)
+                logging.error(errormsg)
+                return {'status':"ERROR",'args':[bag_name,local_source_path,s3_bucket], 'msg': errormsg}
             if calculate_multipart_etag("{0}/{1}".format(local_source_path,local_bucket_key),etag) or etag==row.md5:
                 metadata['verified'].append(bucket_key)
             else:
