@@ -99,7 +99,7 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source')
     s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=u"{0}/{1}".format(s3_base_key,bag_name),MaxKeys=1)
     if 'Contents' in s3_key:
         metadata['exists']=True
-        manifest = "u{0}/{1}/manifest-md5.txt".format(local_source_path,bag_name)
+        manifest = u"{0}/{1}/manifest-md5.txt".format(local_source_path,bag_name)
         metadata['manifest']=manifest
         #Read manifest
         data=read_csv(manifest,sep="  ",names=['md5','filename'],header=None,)
