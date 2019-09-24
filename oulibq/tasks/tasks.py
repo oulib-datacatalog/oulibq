@@ -113,10 +113,10 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source')
             try:
                 etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
             except ClientError:
-                errormsg = "Failed to get S3 object header for key: {0}".format(bucket_key).decode('utf-8')
+                errormsg = u"Failed to get S3 object header for key: {0}".format(bucket_key)
                 logging.error(errormsg)
                 raise Exception(errormsg)
-            if calculate_multipart_etag("{0}/{1}".format(local_source_path,local_bucket_key).decode('utf-8'),etag) or etag==row.md5:
+            if calculate_multipart_etag(u"{0}/{1}".format(local_source_path,local_bucket_key),etag) or etag==row.md5:
                 metadata['verified'].append(bucket_key)
             else:
                 metadata['error'].append(bucket_key)
