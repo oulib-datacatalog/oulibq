@@ -1,7 +1,7 @@
 from celery.task import task
 import os, sys, boto3, requests, json, time
-from bag_migration import get_celery_worker_config, copy_bag, upload_bag_s3
-from tasks import clean_nas_files, validate_nas_files, validate_s3_files, validate_norfile_bag
+from .bag_migration import get_celery_worker_config, copy_bag, upload_bag_s3
+from .tasks import clean_nas_files, validate_nas_files, validate_s3_files, validate_norfile_bag
 import ConfigParser
 import logging
 from datetime import datetime
@@ -75,24 +75,14 @@ def replicate_bag(bag, project=None, department=None, force=None, celery_queue="
     """
     # Check to see if bag exists
     nas_bagit, norfile_bagit, s3_bucket, s3_key, s3_folder = _find_bag(bag)
-    # setup data catalog
-    data = _api_get(bag)
-    if data['count'] > 0:
-        inventory_metadata = data['results'][0]
-    else:
-        # new item to inventory
-        inventory_metadata = {'derivatives': {}, 'project': '', 'department': '', 'bag': bag, 'locations': {
-            's3': {'exists': False, 'valid': False, 'bucket': '', 'validation_date': '', 'manifest': '', 'verified': [],
-                   'error': []},
-            'norfile': {'exists': False, 'valid': False, 'validation_date': '', 'location': 'UL-BAGIT'},
-            'nas': {'exists': False, 'place_holder': False, 'location': ''}}}
+    inventory_metadata = get_metadata(bag)
     # update project and department if available
     if project:
         inventory_metadata['project'] = project
     if department:
         inventory_metadata['department'] = department
     # save inventory metadata
-    _api_save(inventory_metadata)
+    (inventory_metadata)
     # setup workflow chain
     subtasks = []
     bag_chain = []

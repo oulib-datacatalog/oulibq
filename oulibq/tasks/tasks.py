@@ -1,42 +1,15 @@
 from celery.task import task
-import os, hashlib, bagit
-import boto3, shutil, requests, json
+import os, bagit
+import boto3, shutil
 from botocore.exceptions import ClientError
 from pandas import read_csv
-from bag_migration import get_celery_worker_config
-import ConfigParser
+
+from .utils import get_metadata, upsert_metadata, is_tombstone, is_bag_valid, calculate_multipart_etag, query_metadata
+from .utils import touch_file, sanitize_path
+
 import logging
 
 logging.basicConfig(level=logging.INFO)
-
-
-def _get_config_parameter(group, param, config_file="cybercom.cfg"):
-    config = ConfigParser.ConfigParser()
-    config.read(config_file)
-    return config.get(group, param)
-
-
-def _api_get(bag, return_all=None):
-    base_url = _get_config_parameter('api', 'base_url')
-    if return_all:
-        api_url = "{0}catalog/data/catalog/digital_objects/.json?page_size=0".format(base_url)
-    else:
-        query = '{"filter":{"bag":"%s"}}' % bag
-        api_url = "{0}catalog/data/catalog/digital_objects/.json?query={1}".format(base_url, query)
-    req = requests.get(api_url)
-    if req.status_code > 300:
-        raise Exception("Request Error: {0} {1}".format(api_url, req.text))
-    return req.json()
-
-
-def _api_save(data):
-    token = _get_config_parameter('api', 'token')
-    base_url = _get_config_parameter('api', 'base_url')
-    headers = {"Content-Type": "application/json", "Authorization": "Token {0}".format(token)}
-    api_url = "{0}catalog/data/catalog/digital_objects/.json".format(base_url)
-    req = requests.post(api_url, data=json.dumps(data), headers=headers)
-    req.raise_for_status()
-    return True
 
 
 @task()
@@ -48,34 +21,20 @@ def validate_nas_files(bag_name, local_source_paths):
         bag_name - string
         local_source_paths - list of sources
     """
-    data = _api_get(bag_name)
-    # db=MongoClient(mongo_host)
-    inventory_metadata = data['results'][0]
-    # db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    # location=0
-    # for local_source_path in local_source_paths:
+    inventory_metadata = get_metadata(bag_name)
+    nas_metadata = inventory_metadata['locations']['nas']
     local_source_path = os.path.join(local_source_paths, bag_name)
-    if os.path.isdir(local_source_path):
-        inventory_metadata['locations']['nas']['exists'] = True
-        inventory_metadata['locations']['nas']['place_holder'] = False
-        inventory_metadata['locations']['nas']['location'] = local_source_path
-        inventory_metadata['locations']['nas']['error'] = ""
-        # location+=1
-    elif os.path.exists(local_source_path):
-        inventory_metadata['locations']['nas']['exists'] = False
-        inventory_metadata['locations']['nas']['place_holder'] = True
-        inventory_metadata['locations']['nas']['location'] = local_source_path
-        inventory_metadata['locations']['nas']['error'] = ""
-        # location+=1
-    # if location>1:
+    nas_metadata['location'] = local_source_path
+    nas_metadata['error'] = ""
+    if not os.path.exists(local_source_path):
+        nas_metadata['error'] = "Bag Folder or placeholder not found."
+    elif is_tombstone(local_source_path):
+        nas_metadata['exists'] = False
+        nas_metadata['place_holder'] = True
     else:
-        inventory_metadata['locations']['nas']['error'] = "Bag Folder or placeholder not found."
-    # save metadata
-    # make sure data is fresh and no overright of metadata
-    data = _api_get(bag_name)
-    save_meta = data['results'][0]
-    save_meta['locations']['nas'] = inventory_metadata['locations']['nas']
-    _api_save(save_meta)
+        nas_metadata['exists'] = True
+        nas_metadata['place_holder'] = False
+    upsert_metadata(inventory_metadata)
     return {'status': "SUCCESS", 'args': [bag_name, local_source_paths], 'nas': inventory_metadata['locations']['nas']}
 
 
@@ -89,23 +48,22 @@ def validate_s3_files(bag_name, local_source_path, s3_bucket, s3_base_key='sourc
         s3_base_key='source'
     """
     # Find metadata
-    data = _api_get(bag_name)
-    inventory_metadata = data['results'][0]  # db.catalog.bagit_inventory.find_one({'bag':bag_name})
-    metadata = inventory_metadata['locations']['s3']
+    inventory_metadata = get_metadata(bag_name)
+    s3_metadata = inventory_metadata['locations']['s3']
     # S3 bucket
     s3 = boto3.client('s3')
     s3_key = s3.list_objects(Bucket=s3_bucket, Prefix="{0}/{1}".format(s3_base_key, bag_name).decode('utf-8'),
                              MaxKeys=1)
     if 'Contents' in s3_key:
-        metadata['exists'] = True
+        s3_metadata['exists'] = True
         manifest = "{0}/{1}/manifest-md5.txt".format(local_source_path, bag_name).decode('utf-8')
-        metadata['manifest'] = manifest
+        s3_metadata['manifest'] = manifest
         # Read manifest
         data = read_csv(manifest, sep="  ", names=['md5', 'filename'], header=None, )
-        metadata['bucket'] = s3_bucket
-        metadata['verified'] = []
-        metadata['error'] = []
-        metadata['valid'] = False
+        s3_metadata['bucket'] = s3_bucket
+        s3_metadata['verified'] = []
+        s3_metadata['error'] = []
+        s3_metadata['valid'] = False
         for index, row in data.iterrows():
             bucket_key = "{0}/{1}/{2}".format(s3_base_key, bag_name, row.filename).decode('utf-8')
             local_bucket_key = "{0}/{1}".format(bag_name, row.filename).decode('utf-8')
@@ -117,22 +75,15 @@ def validate_s3_files(bag_name, local_source_path, s3_bucket, s3_base_key='sourc
                 raise Exception(errormsg)
             if calculate_multipart_etag(u"{0}/{1}".format(local_source_path, local_bucket_key),
                                         etag) or etag == row.md5:
-                metadata['verified'].append(bucket_key)
+                s3_metadata['verified'].append(bucket_key)
             else:
-                metadata['error'].append(bucket_key)
-        if len(metadata['error']) == 0:
-            metadata['valid'] = True
+                s3_metadata['error'].append(bucket_key)
+        if len(s3_metadata['error']) == 0:
+            s3_metadata['valid'] = True
     else:
-        metadata['exists'] = False
-    inventory_metadata['locations']['s3'] = metadata
-    # Save metadata
-    # make sure data is fresh and no overright of metadata
-    data = _api_get(bag_name)
-    save_meta = data['results'][0]
-    save_meta['locations']['s3'] = metadata
-    _api_save(save_meta)
-    return {'status': "SUCCESS", 'args': [bag_name, local_source_path, s3_bucket], 's3': metadata}
-    # return metadata
+        s3_metadata['exists'] = False
+    upsert_metadata(inventory_metadata)
+    return {'status': "SUCCESS", 'args': [bag_name, local_source_path, s3_bucket], 's3': s3_metadata}
 
 
 @task()
@@ -142,120 +93,140 @@ def validate_norfile_bag(bag_name, local_source_path):
     args:
         bag_name,local_source_path
     """
-    # Find metadata
-    data = _api_get(bag_name)
-    inventory_metadata = data['results'][0]
-    # bag=bagit.Bag('{0}/{1}'.format(local_source_path,bag_name))
-    if os.path.isdir('{0}/{1}'.format(local_source_path, bag_name)):
-        inventory_metadata['locations']['norfile']['exists'] = True
-        bag = bagit.Bag('{0}/{1}'.format(local_source_path, bag_name))
-        if bag.has_oxum():
-            inventory_metadata['locations']['norfile']['valid'] = bag.is_valid(fast=True)
-        else:
-            try:
-                inventory_metadata['locations']['norfile']['valid'] = bag.validate(processes=4)
-            except:
-                logging.error("Error validating bag: {0}".format(bag_name))
-                raise
+    inventory_metadata = get_metadata(bag_name)
+    norfile_metadata = inventory_metadata['locations']['norfile']
+    bag_path = os.path.join(local_source_path, bag_name)
+    if os.path.isdir(bag_path):
+        norfile_metadata['exists'] = True
+        norfile_metadata['valid'] = is_bag_valid(bag_path)
     else:
-        inventory_metadata['locations']['norfile']['exists'] = False
-        inventory_metadata['locations']['norfile']['valid'] = False
-    # Save metadata
-    # make sure data is fresh and no overright of metadata
-    data = _api_get(bag_name)
-    save_meta = data['results'][0]
-    save_meta['locations']['norfile'] = inventory_metadata['locations']['norfile']
-    _api_save(save_meta)
-    return {'status': "SUCCESS", 'args': [bag_name, local_source_path],
-            'norfile': inventory_metadata['locations']['norfile']}
+        norfile_metadata['exists'] = False
+        norfile_metadata['valid'] = False
+    upsert_metadata(inventory_metadata)
+    return {'status': "SUCCESS", 'args': [bag_name, local_source_path], 'norfile': norfile_metadata}
 
 
 @task()
-def clean_nas_files(bag=None):
+def clean_nas_files():
     """
     Clean NAS files is a task that checks the bagit inventory catalog for bags that can be deleted from NAS
 
     """
-    # Check if only one bag
-    if bag:
-        data = _api_get(bag)
-    else:
-        # return all digital objects
-        data = _api_get("test", return_all=True)
-    subtasks = []
     errors = []
-    for itm in data['results']:
-        if itm['locations']['s3']['valid'] and itm['locations']['norfile']['valid'] and itm['locations']['nas'][
-            'exists']:
-            subtasks.append(itm['bag'])
-    for itm in subtasks:
+    removed = 0
+    query = {
+        "locations.s3.valid": True,
+        "locations.norfile.valid": True,
+        "locations.nas.exists": True
+    }
+    for record in query_metadata(query, bag=1, _id=0):  # return the "bag" field only
         try:
-            remove_nas_files(itm)
+            remove_nas_files(record['bag'])
+            removed += 1
         except Exception as e:
             errors.append(str(e))
-    bag_errors = ",  ".join(errors)
-    return "Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ".format((len(subtasks) - len(errors)),
-                                                                                      len(errors), bag_errors)
+    bag_errors = ", ".join(errors)
+    return "Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ".format(removed, len(errors), bag_errors)
 
 
+@task(bind=True)
+def copy_bag(self, bag_name, source_path, dest_path):
+    """
+        This task copies bag from NAS to Norfile. Task must have access to source and destination.
+
+        args:
+            bag_name -  string bag name
+            source_path - string source path to NAS location. Do not include bag name in variable.
+            dest_path - string destination path to Norfile location. Do not include bag name in variable.
+    """
+    baglist = bag_name.split('/')
+    if len(baglist) > 1:
+        dest = os.path.join(dest_path, baglist[0])
+    else:
+        dest = dest_path
+    source = os.path.join(source_path, bag_name)
+    if not os.path.isdir(source):
+        msg = "Bag source directory does not exist. {0}".format(source)
+        raise Exception(msg)
+        # self.update_state(state=states.FAILURE,meta=msg)
+        # raise Ignore()
+    task_id = str(copy_bag.request.id)
+    log = open("{0}.tmp".format(task_id), "w+")
+    # status=call(['rsync','-rltD','--delete',source,dest],stderr=log)
+    status = call(['sudo', 'rsync', '-rltD', source, dest], stderr=log)
+    if status != 0:
+        log.seek(0)
+        msg = log.read()
+        log.close()
+        self.update_state(state=states.FAILURE, meta=msg)
+        raise Ignore()
+
+    msg = "Bag copied from {0} to {1}".format(source, dest)
+    log.close()
+    log.close()
+    return msg
+
+
+@task(bind=True)
+def upload_bag_s3(self, bag_name, source_path, s3_bucket, s3_location):
+    """
+        This task uploads Norfile bag to AWS S3 bucket.
+
+        args:
+            bag_name (string): Bag Name.
+            source_path (string): Path to Norfile location. Do not include bag name in path.
+            s3_bucket (string): S3 bucket
+            s3_location (string): key within bucket. Example - 'source/Baldi_1706'
+    """
+    source = "{0}/{1}".format(source_path, bag_name)
+    if not os.path.isdir(source):
+        msg = "Bag source directory does not exist. {0}".format(source)
+        raise Exception(msg)
+    s3_loc = "s3://{0}/{1}".format(s3_bucket, s3_location)
+    task_id = str(upload_bag_s3.request.id)
+    log = open("{0}.tmp".format(task_id), "w+")
+    bin_path = os.path.split(os.path.abspath(sys.executable))[0]
+    # status=call(['{0}/aws'.format(bin_path),'s3','sync','--delete', source,s3_loc],stderr=log)
+    status = call(['{0}/aws'.format(bin_path), 's3', 'sync', source, s3_loc], stderr=log)
+    if status != 0:
+        log.seek(0)
+        msg = log.read()
+        log.close()
+        os.remove("{0}.tmp".format(task_id))
+        self.update_state(state=states.FAILURE, meta=msg)
+        raise Ignore()
+    else:
+        msg = "Bag uploaded from {0} to {1}".format(source, s3_loc)
+        log.close()
+        os.remove("{0}.tmp".format(task_id))
+    return msg
+
+
+@task()
 def remove_nas_files(bag_name):
     """
     Remove NAS bag
     agrs:
         bag_name
     """
-    data = _api_get(bag_name)
-    itm = data['results'][0]
-    if not itm['locations']['nas']['location'] == "/" and len(itm['locations']['nas']['location']) > 15:
-        if not itm['locations']['nas']['exists']:
+    inventory_metadata = get_metadata(bag_name)
+    nas_metadata = inventory_metadata['locations']['nas']
+    bag_location = nas_metadata['location']
+    if (not bag_location == "/") and (len(bag_location) > 15) and (sanitize_path(bag_location) == bag_location):
+        if not nas_metadata['exists']:
             raise Exception("Bag: {0} has already been removed".format(bag_name))
-
         try:
-            shutil.rmtree(itm['locations']['nas']['location'])
-            itm['locations']['nas']['exists'] = False
-            itm['locations']['nas']['place_holder'] = True
-            # create placeholder
-            open(itm['locations']['nas']['location'], 'a').close()
-            # Save metadata
-            _api_save(itm)
+            shutil.rmtree(bag_location)
+            nas_metadata['exists'] = False
+            # create placeholder / tombstone
+            touch_file(bag_location)
+            nas_metadata['place_holder'] = True
         except Exception as e:
-            # pull metadata to prevent lose of metadata
-            data = _api_get(bag_name)
-            itm = data['results'][0]
-            msg = "Error removing files: {0}. {1}".format(itm['locations']['nas']['location'], str(e))
-            itm['locations']['nas']['ERROR'] = msg
-            # Save metadata
-            _api_save(itm)
+            msg = "Error removing files: {0}. {1}".format(bag_location, str(e))
             logging.error(msg)
-            raise Exception(msg)
-        # status=call(["rm","-rf",itm['locations']['nas']['location']])
+            nas_metadata['error'] = msg
+        finally:
+            upsert_metadata(inventory_metadata)
     else:
-        logging.error("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
-        raise Exception("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
-
-
-def calculate_multipart_etag(source_path, etag, chunk_size=8):
-    """
-    calculates a multipart upload etag for amazon s3
-    Arguments:
-        source_path -- The file to calculate the etag
-        etag -- s3 etag to compare
-    Keyword Arguments:
-        chunk_size -- The chunk size to calculate for. Default 8
-    """
-    md5s = []
-    chunk_size = chunk_size * 1024 * 1024
-    with open(source_path, 'rb') as fp:
-        while True:
-            data = fp.read(chunk_size)
-            if not data:
-                break
-            md5s.append(hashlib.md5(data))
-    digests = b"".join(m.digest() for m in md5s)
-    new_md5 = hashlib.md5(digests)
-    new_etag = '%s-%s' % (new_md5.hexdigest(), len(md5s))
-    # print source_path,new_etag,etag
-    if etag == new_etag:
-        return True
-    else:
-        return False
+        logging.error("Suspicious Bag location: Security Error - {0}".format(bag_location))
+        raise Exception("Suspicious Bag location: Security Error - {0}".format(bag_location))
