@@ -227,7 +227,14 @@ def remove_nas_files(bag_name):
         logging.error("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
         raise Exception("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
 
-def calculate_multipart_etag(source_path,etag, chunk_size=8):
+
+def factor_of_1MB(file_size, num_parts):
+    x = file_size / int(num_parts)
+    y = x % 1048576
+    return int(x + 1048576 - y)
+
+
+def calculate_multipart_etag(source_path,etag,chunk_size=None):
 
     """
     calculates a multipart upload etag for amazon s3
@@ -235,10 +242,16 @@ def calculate_multipart_etag(source_path,etag, chunk_size=8):
         source_path -- The file to calculate the etag
         etag -- s3 etag to compare
     Keyword Arguments:
-        chunk_size -- The chunk size to calculate for. Default 8
+        chunk_size -- The chunk size to calculate for.
     """
+
     md5s = []
-    chunk_size = chunk_size * 1024 * 1024
+    if chunk_size:
+        chunk_size = chunk_size * 1024 * 1024
+    else:
+        num_parts = etag.split("-")[-1]
+        file_size = os.path.getsize(source_path)
+        chunk_size = factor_of_1MB(file_size, num_parts)
     with open(source_path,'rb') as fp:
         while True:
             data = fp.read(chunk_size)
