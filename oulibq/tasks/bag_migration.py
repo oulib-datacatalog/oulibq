@@ -6,6 +6,7 @@ from celery.task.sets import TaskSet
 from subprocess import call,STDOUT
 #import requests
 import os, hashlib, bagit,time,sys
+from os.path import ismount
 from pymongo import MongoClient
 import boto3,shutil,requests
 from pandas import read_csv
@@ -25,6 +26,16 @@ def get_celery_worker_config(api_host):
     return config
 
 
+def on_mounted_filesystem(path):
+    """ check that path is on a mounted filesystem """
+    stack = []
+    for item in path.split("/"):
+        stack.append(item)
+        if ismount("/".join(stack)):
+            return True
+    return False
+
+
 @task(bind=True)
 def copy_bag(self,bag_name,source_path,dest_path):
     """
@@ -40,6 +51,9 @@ def copy_bag(self,bag_name,source_path,dest_path):
         dest=os.path.join(dest_path,baglist[0])
     else:
         dest=dest_path
+    if not on_mounted_filesystem(dest):
+        msg="The destination is not on a mounted filesystem: {0}".format(dest)
+        raise Exception(msg)
     source = os.path.join(source_path,bag_name)
     if not os.path.isdir(source):
         msg="Bag source directory does not exist. {0}".format(source)
