@@ -228,13 +228,7 @@ def remove_nas_files(bag_name):
         raise Exception("Suspicious Bag location: Security Error - {0}".format(itm['locations']['nas']['location']))
 
 
-def factor_of_1MB(file_size, num_parts):
-    x = file_size / int(num_parts)
-    y = x % 1048576
-    return int(x + 1048576 - y)
-
-
-def calculate_multipart_etag(source_path,etag,chunk_size=None):
+def calculate_multipart_etag(source_path,etag,chunk_size_mb=8):
 
     """
     calculates a multipart upload etag for amazon s3
@@ -246,22 +240,24 @@ def calculate_multipart_etag(source_path,etag,chunk_size=None):
     """
 
     md5s = []
-    if chunk_size:
-        chunk_size = chunk_size * 1024 * 1024
-    else:
-        num_parts = etag.split("-")[-1]
-        file_size = os.path.getsize(source_path)
-        chunk_size = factor_of_1MB(file_size, num_parts)
+    etag_parts = etag.split("-") 
+    num_parts = etag_parts[1] if len(etag_parts) > 1 else None
+    chunk_size = chunk_size_mb * 1024 ** 2
     with open(source_path,'rb') as fp:
         while True:
             data = fp.read(chunk_size)
             if not data:
                 break
             md5s.append(hashlib.md5(data))
+    
+    # if hash of first chunk matches etag and
+    # etag does not list number of chunks
+    if md5s[0].hexdigest() == etag and not num_parts:
+        return True
+    
     digests = b"".join(m.digest() for m in md5s)
     new_md5 = hashlib.md5(digests)
     new_etag = '%s-%s' % (new_md5.hexdigest(),len(md5s))
-    #print source_path,new_etag,etag
     if etag==new_etag:
         return True
     else:
