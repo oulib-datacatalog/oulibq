@@ -9,7 +9,7 @@ import os, hashlib, bagit
 #from pymongo import MongoClient
 import boto3,shutil,requests,json
 from botocore.exceptions import ClientError
-from pandas import read_csv
+#from pandas import read_csv
 #Default base directory
 #basedir="/data/static/"
 from bag_migration import get_celery_worker_config
@@ -102,21 +102,31 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source')
         manifest = "{0}/{1}/manifest-md5.txt".format(local_source_path,bag_name).decode('utf-8')
         metadata['manifest']=manifest
         #Read manifest
-        data=read_csv(manifest,sep="  ",names=['md5','filename'],header=None,)
+        #data=read_csv(manifest,sep="  ",names=['md5','filename'],header=None,)
+        manifest_items = []
+        with open(manifest, "r") as f:
+            for line in f.readlines():
+                hash_val, *filename = line.split("  ")
+                filename = "  ".join(filename).strip()
+                manifest_items.append({
+                    "md5": hash_val,
+                    "filename": filename
+                    })
         metadata['bucket']=s3_bucket
         metadata['verified']=[]
         metadata['error']=[]
         metadata['valid']=False
-        for index, row in data.iterrows():
-            bucket_key = "{0}/{1}/{2}".format(s3_base_key,bag_name,row.filename).decode('utf-8')
-            local_bucket_key = "{0}/{1}".format(bag_name,row.filename).decode('utf-8')
+        for row in manifest_items:
+            md5, filename = row['md5'], row['filename']
+            bucket_key = "{0}/{1}/{2}".format(s3_base_key,bag_name,filename).decode('utf-8')
+            local_bucket_key = "{0}/{1}".format(bag_name,filename).decode('utf-8')
             try:
                 etag=s3.head_object(Bucket=s3_bucket,Key=bucket_key)['ETag'][1:-1]
             except ClientError:
                 errormsg = u"Failed to get S3 object header for key: {0}".format(bucket_key)
                 logging.error(errormsg)
                 raise Exception(errormsg)
-            if calculate_multipart_etag(u"{0}/{1}".format(local_source_path,local_bucket_key),etag) or etag==row.md5:
+            if calculate_multipart_etag(u"{0}/{1}".format(local_source_path,local_bucket_key),etag) or etag==md5:
                 metadata['verified'].append(bucket_key)
             else:
                 metadata['error'].append(bucket_key)
