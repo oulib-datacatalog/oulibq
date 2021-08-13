@@ -123,9 +123,9 @@ def managed_replication(number_of_tasks=15,days2wait=2,celery_queue="digilab-nas
     kwargs:
         number_of_tasks - default 15
 
-    The task will check in each location and sublocation(private,preservation,shareok) and run the first two from each list. If 
-    space left to run more tasks. Will add the remaining tasks to the total number. The order is determined by day of year (odd 
-    reverse order).   
+    The task will check in each location and sublocation(private,preservation,shareok,external-preservation)
+    and run the first two from each list. If space left to run more tasks. Will add the remaining tasks to
+    the total number. The order is determined by day of year (odd reverse order).
     """
     tasks=[]
     remaining=[]
@@ -138,7 +138,7 @@ def managed_replication(number_of_tasks=15,days2wait=2,celery_queue="digilab-nas
     nas_config= get_celery_worker_config("deprecated-value")
     nas1=nas_config["nas"]["bagit"]
     nas2= nas_config["nas"]["bagit2"]
-    for loc in ["preservation","private","shareok",""]:
+    for loc in ["preservation","private","shareok","external-preservation",""]:
         #nas1
         temp,tempremain = _filterbags(_get_bags(nas1,loc,days2wait=days2wait),order)
         tasks=tasks + temp
