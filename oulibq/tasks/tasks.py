@@ -106,7 +106,9 @@ def validate_s3_files(bag_name,local_source_path,s3_bucket,s3_base_key='source')
         manifest_items = []
         with open(manifest, "r") as f:
             for line in f.readlines():
-                hash_val, *filename = line.split("  ")
+                # hash_val, *filename = line.split("  ")  # This only works in 3.x+
+                line_split = iter(line.split("  "))
+                hash_val, filename = next(line_split), list(line_split)
                 filename = "  ".join(filename).strip()
                 manifest_items.append({
                     "md5": hash_val,
