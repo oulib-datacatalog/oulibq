@@ -5,6 +5,8 @@ from tasks import clean_nas_files,validate_nas_files,validate_s3_files,validate_
 import ConfigParser
 import logging
 from datetime import datetime
+from subprocess import call
+import shutil
 
 from celery import signature,chain,group
 
