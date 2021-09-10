@@ -21,6 +21,7 @@ except ImportError:
     Path = None
 
 from .config import inventory_metadata, bag_locations, private_locations
+from .config import DEFAULT_DAYS_TO_WAIT
 
 app = Celery()
 app.config_from_object(celeryconfig)
@@ -118,13 +119,13 @@ def is_bag_valid(path):
         return False
 
 
-def is_older_than(path, days=2):
+def is_older_than(path, days=DEFAULT_DAYS_TO_WAIT):
     """ check modified time of path is older than specified days, returning boolean """
     seconds = days * 24 * 60 * 60
     return (time.time() - os.stat(path).st_mtime) >= seconds
 
 
-def list_older(items, days=2):
+def list_older(items, days=DEFAULT_DAYS_TO_WAIT):
     """ check list of paths returning a list of those with a modified time older than specified days """
     directories = [item for item in items if os.path.isdir(item)]
     older_map = map(partial(is_older_than, days=days), directories)
@@ -132,24 +133,24 @@ def list_older(items, days=2):
     return older_bags
 
 
-def _list_bags(items, valid=True, limit_older=True, days=2):
-    """ filter list of bagged items returning list """
+def _filter_bags(items, valid=True, limit_older=True, days=DEFAULT_DAYS_TO_WAIT):
+    """ filter list of bagged items by validity and age """
     if limit_older:
         directories = list_older(items, days=days)
     else:
         directories = [item for item in items if os.path.isdir(item)]
     valid_map = map(is_bag_valid, directories)
-    invalid_bags = [directories[i] for i, x in enumerate(valid_map) if x is valid]
-    return invalid_bags
+    filtered_bags = [directories[i] for i, x in enumerate(valid_map) if x is valid]
+    return filtered_bags
 
 
-def list_invalid(bags, limit_older=True):
+def list_invalid(bags, limit_older=True, days=DEFAULT_DAYS_TO_WAIT):
     """ filter list of bags returning list of invalid bags """
-    return _list_bags(bags, valid=False, limit_older=limit_older)
+    return _filter_bags(bags, valid=False, limit_older=limit_older, days=days)
 
 
-def list_valid(bags, limit_older=True):
-    return _list_bags(bags, valid=True, limit_older=limit_older)
+def list_valid(bags, limit_older=True, days=DEFAULT_DAYS_TO_WAIT):
+    return _filter_bags(bags, valid=True, limit_older=limit_older, days=days)
 
 
 def iterate_bags(paths):
@@ -163,8 +164,8 @@ def iterate_bags(paths):
 
 
 def is_private(bag):
-    """ returns True if bag contains any private locations """
-    return any(map(bag.__contains__), private_locations)
+    """ returns True if bag is in a private locations """
+    return any(map(bag.startswith, private_locations))
 
 
 def find_bag(bag):
@@ -172,18 +173,17 @@ def find_bag(bag):
     Function returns path to nas and norfile on current worker. Determines if bag is on Nas1 or Nas2.
     returns NAS Path , Norfile Path, S3 Bucket,S3 Key, S3 folder
     """
-    nas_config = bag_locations
-    if os.path.isdir(os.path.join(nas_config["nas"]["bagit"], bag)):
-        nas_path = nas_config["nas"]["bagit"]
-    elif os.path.isdir(os.path.join(nas_config["nas"]["bagit2"], bag)):
-        nas_path = nas_config["nas"]["bagit2"]
+    for location in bag_locations["nas"].values():
+        if not location:
+            continue
+        nas_path = os.path.join(location, bag)
+        if os.path.isdir(nas_path):
+            break
     else:
-        raise Exception("Checked both NAS location and unable to find bag:{0}.".format(bag))
-    if "private" in bag or "preservation" in bag or "shareok" in bag:
-        s3_folder = "private"
-    else:
-        s3_folder = "source"
-    return nas_path, nas_config["norfile"]["bagit"], nas_config["s3"]["bucket"], os.path.join(s3_folder, bag), s3_folder
+        raise Exception("Checked NAS locations and unable to find bag:{0}.".format(bag))
+
+    s3_folder = "private" if is_private(bag) else "source"
+    return nas_path, bag_locations["norfile"]["bagit"], bag_locations["s3"]["bucket"], os.path.join(s3_folder, bag), s3_folder
 
 
 def mmsid_exists(bag_path):
@@ -204,6 +204,7 @@ def mmsid_exists(bag_path):
 
 
 def list_no_mmsid(items):
+    """ Checks multiple bags for mmsid returning list of bags with no mmsid """
     directories = [item for item in items if os.path.isdir(item)]
     exists_map = map(mmsid_exists, directories)
     no_mmsid_bags = [directories[i] for i, x in enumerate(exists_map) if x is False]

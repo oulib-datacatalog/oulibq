@@ -1,8 +1,13 @@
-from celery.task import task
-import os, bagit
-import boto3, shutil
+import os
+import shutil
+import sys
+import boto3
+
+from subprocess import call
 from botocore.exceptions import ClientError
-from pandas import read_csv
+from celery import states
+from celery.task import task
+from celery.exceptions import Ignore
 
 from .utils import get_metadata, upsert_metadata, is_tombstone, is_bag_valid, calculate_multipart_etag, query_metadata
 from .utils import touch_file, sanitize_path
@@ -31,9 +36,11 @@ def validate_nas_files(bag_name, local_source_paths):
     elif is_tombstone(local_source_path):
         nas_metadata['exists'] = False
         nas_metadata['place_holder'] = True
-    else:
+    elif is_bag_valid(local_source_path):
         nas_metadata['exists'] = True
         nas_metadata['place_holder'] = False
+    else:
+        nas_metadata['error'] = "Failed bag validation."
     upsert_metadata(inventory_metadata)
     return {'status': "SUCCESS", 'args': [bag_name, local_source_paths], 'nas': inventory_metadata['locations']['nas']}
 
@@ -59,14 +66,27 @@ def validate_s3_files(bag_name, local_source_path, s3_bucket, s3_base_key='sourc
         manifest = "{0}/{1}/manifest-md5.txt".format(local_source_path, bag_name).decode('utf-8')
         s3_metadata['manifest'] = manifest
         # Read manifest
-        data = read_csv(manifest, sep="  ", names=['md5', 'filename'], header=None, )
+        manifest_items = []
+        with open(manifest, "r") as f:
+            for line in f.readlines():
+                # filenames can contain multiple spaces, splitting hash and
+                # filename by the first occurence of doublespace
+                # hash_val, *filename = line.split("  ")  # This only works in 3.x+
+                line_split = iter(line.split("  "))
+                hash_val, filename = next(line_split), list(line_split)
+                filename = "  ".join(filename).strip()
+                manifest_items.append({
+                    "md5": hash_val,
+                    "filename": filename
+                    })
         s3_metadata['bucket'] = s3_bucket
         s3_metadata['verified'] = []
         s3_metadata['error'] = []
         s3_metadata['valid'] = False
-        for index, row in data.iterrows():
-            bucket_key = "{0}/{1}/{2}".format(s3_base_key, bag_name, row.filename).decode('utf-8')
-            local_bucket_key = "{0}/{1}".format(bag_name, row.filename).decode('utf-8')
+        for row in manifest_items:
+            md5, filename = row['md5'], row['filename']
+            bucket_key = "{0}/{1}/{2}".format(s3_base_key, bag_name, filename).decode('utf-8')
+            local_bucket_key = "{0}/{1}".format(bag_name, filename).decode('utf-8')
             try:
                 etag = s3.head_object(Bucket=s3_bucket, Key=bucket_key)['ETag'][1:-1]
             except ClientError:
@@ -74,7 +94,7 @@ def validate_s3_files(bag_name, local_source_path, s3_bucket, s3_base_key='sourc
                 logging.error(errormsg)
                 raise Exception(errormsg)
             if calculate_multipart_etag(u"{0}/{1}".format(local_source_path, local_bucket_key),
-                                        etag) or etag == row.md5:
+                                        etag) or etag == md5:
                 s3_metadata['verified'].append(bucket_key)
             else:
                 s3_metadata['error'].append(bucket_key)

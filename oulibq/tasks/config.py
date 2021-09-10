@@ -1,5 +1,7 @@
 import os
 
+DEFAULT_DAYS_TO_WAIT = 2  # wait this number of days before processing a bag using modified timestamp
+
 paths = [os.getenv("LOCAL_BAGIT_SRC_PATH"), os.getenv("REMOTE_BAGIT_SRC_PATH")]
 
 bag_locations = {
@@ -11,7 +13,7 @@ bag_locations = {
     "norfile": {"bagit": os.getenv('REMOTE_BAGIT_DEST_PATH', None)}
 }
 
-private_locations = ['shareok', 'preservation', 'private']
+private_locations = ['shareok', 'preservation', 'private', 'external-preservation']
 
 inventory_metadata = {
     'derivatives': {},

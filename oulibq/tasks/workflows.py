@@ -1,7 +1,6 @@
 from celery.task import task
-from .utils import get_metadata, upsert_metadata
+from .utils import get_metadata, upsert_metadata, in_norfile
 from .utils import is_bag_valid
-
 
 @task()
 def replicate(bag):
