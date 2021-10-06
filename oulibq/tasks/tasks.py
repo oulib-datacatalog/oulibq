@@ -3,6 +3,7 @@ import shutil
 import sys
 import boto3
 
+from six import ensure_text
 from subprocess import call
 from botocore.exceptions import ClientError
 from celery import states
@@ -59,11 +60,10 @@ def validate_s3_files(bag_name, local_source_path, s3_bucket, s3_base_key='sourc
     s3_metadata = inventory_metadata['locations']['s3']
     # S3 bucket
     s3 = boto3.client('s3')
-    s3_key = s3.list_objects(Bucket=s3_bucket, Prefix="{0}/{1}".format(s3_base_key, bag_name).decode('utf-8'),
-                             MaxKeys=1)
+    s3_key = s3.list_objects(Bucket=s3_bucket, Prefix=ensure_text("{0}/{1}").format(s3_base_key, bag_name), MaxKeys=1)
     if 'Contents' in s3_key:
         s3_metadata['exists'] = True
-        manifest = "{0}/{1}/manifest-md5.txt".format(local_source_path, bag_name).decode('utf-8')
+        manifest = ensure_text("{0}/{1}/manifest-md5.txt").format(local_source_path, bag_name)
         s3_metadata['manifest'] = manifest
         # Read manifest
         manifest_items = []
@@ -85,15 +85,15 @@ def validate_s3_files(bag_name, local_source_path, s3_bucket, s3_base_key='sourc
         s3_metadata['valid'] = False
         for row in manifest_items:
             md5, filename = row['md5'], row['filename']
-            bucket_key = "{0}/{1}/{2}".format(s3_base_key, bag_name, filename).decode('utf-8')
-            local_bucket_key = "{0}/{1}".format(bag_name, filename).decode('utf-8')
+            bucket_key = ensure_text("{0}/{1}/{2}").format(s3_base_key, bag_name, filename)
+            local_bucket_key = ensure_text("{0}/{1}").format(bag_name, filename)
             try:
                 etag = s3.head_object(Bucket=s3_bucket, Key=bucket_key)['ETag'][1:-1]
             except ClientError:
-                errormsg = u"Failed to get S3 object header for key: {0}".format(bucket_key)
+                errormsg = ensure_text("Failed to get S3 object header for key: {0}").format(bucket_key)
                 logging.error(errormsg)
                 raise Exception(errormsg)
-            if calculate_multipart_etag(u"{0}/{1}".format(local_source_path, local_bucket_key),
+            if calculate_multipart_etag(ensure_text("{0}/{1}").format(local_source_path, local_bucket_key),
                                         etag) or etag == md5:
                 s3_metadata['verified'].append(bucket_key)
             else:
@@ -146,7 +146,7 @@ def clean_nas_files():
         except Exception as e:
             errors.append(str(e))
     bag_errors = ", ".join(errors)
-    return "Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ".format(removed, len(errors), bag_errors)
+    return ensure_text("Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ").format(removed, len(errors), bag_errors)
 
 
 @task(bind=True)
@@ -166,7 +166,7 @@ def copy_bag(self, bag_name, source_path, dest_path):
         dest = dest_path
     source = os.path.join(source_path, bag_name)
     if not os.path.isdir(source):
-        msg = "Bag source directory does not exist. {0}".format(source)
+        msg = ensure_text("Bag source directory does not exist. {0}").format(source)
         raise Exception(msg)
         # self.update_state(state=states.FAILURE,meta=msg)
         # raise Ignore()
@@ -181,7 +181,7 @@ def copy_bag(self, bag_name, source_path, dest_path):
         self.update_state(state=states.FAILURE, meta=msg)
         raise Ignore()
 
-    msg = "Bag copied from {0} to {1}".format(source, dest)
+    msg = ensure_text("Bag copied from {0} to {1}").format(source, dest)
     log.close()
     log.close()
     return msg
@@ -198,13 +198,13 @@ def upload_bag_s3(self, bag_name, source_path, s3_bucket, s3_location):
             s3_bucket (string): S3 bucket
             s3_location (string): key within bucket. Example - 'source/Baldi_1706'
     """
-    source = "{0}/{1}".format(source_path, bag_name)
+    source = ensure_text("{0}/{1}").format(source_path, bag_name)
     if not os.path.isdir(source):
-        msg = "Bag source directory does not exist. {0}".format(source)
+        msg = ensure_text("Bag source directory does not exist. {0}").format(source)
         raise Exception(msg)
-    s3_loc = "s3://{0}/{1}".format(s3_bucket, s3_location)
+    s3_loc = ensure_text("s3://{0}/{1}").format(s3_bucket, s3_location)
     task_id = str(upload_bag_s3.request.id)
-    log = open("{0}.tmp".format(task_id), "w+")
+    log = open(ensure_text("{0}.tmp").format(task_id), "w+")
     bin_path = os.path.split(os.path.abspath(sys.executable))[0]
     # status=call(['{0}/aws'.format(bin_path),'s3','sync','--delete', source,s3_loc],stderr=log)
     status = call(['{0}/aws'.format(bin_path), 's3', 'sync', source, s3_loc], stderr=log)
@@ -212,13 +212,13 @@ def upload_bag_s3(self, bag_name, source_path, s3_bucket, s3_location):
         log.seek(0)
         msg = log.read()
         log.close()
-        os.remove("{0}.tmp".format(task_id))
+        os.remove(ensure_text("{0}.tmp").format(task_id))
         self.update_state(state=states.FAILURE, meta=msg)
         raise Ignore()
     else:
-        msg = "Bag uploaded from {0} to {1}".format(source, s3_loc)
+        msg = ensure_text("Bag uploaded from {0} to {1}").format(source, s3_loc)
         log.close()
-        os.remove("{0}.tmp".format(task_id))
+        os.remove(ensure_text("{0}.tmp").format(task_id))
     return msg
 
 
@@ -234,7 +234,7 @@ def remove_nas_files(bag_name):
     bag_location = nas_metadata['location']
     if (not bag_location == "/") and (len(bag_location) > 15) and (sanitize_path(bag_location) == bag_location):
         if not nas_metadata['exists']:
-            raise Exception("Bag: {0} has already been removed".format(bag_name))
+            raise Exception(ensure_text("Bag: {0} has already been removed").format(bag_name))
         try:
             shutil.rmtree(bag_location)
             nas_metadata['exists'] = False
@@ -242,11 +242,12 @@ def remove_nas_files(bag_name):
             touch_file(bag_location)
             nas_metadata['place_holder'] = True
         except Exception as e:
-            msg = "Error removing files: {0}. {1}".format(bag_location, str(e))
+            msg = ensure_text("Error removing files: {0}. {1}").format(bag_location, str(e))
             logging.error(msg)
             nas_metadata['error'] = msg
         finally:
             upsert_metadata(inventory_metadata)
     else:
-        logging.error("Suspicious Bag location: Security Error - {0}".format(bag_location))
-        raise Exception("Suspicious Bag location: Security Error - {0}".format(bag_location))
+        msg = ensure_text("Suspicious Bag location: Security Error - {0}").format(bag_location)
+        logging.error(msg)
+        raise Exception(msg)
