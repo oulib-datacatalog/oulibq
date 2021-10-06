@@ -12,5 +12,6 @@ setup(name='oulibq',
           'requests==2.24.0',
           'boto3==1.16.51',
           'bagit==1.7.0',
+          'six==1.16.0',
       ],
 )

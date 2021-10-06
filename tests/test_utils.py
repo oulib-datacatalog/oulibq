@@ -6,8 +6,31 @@ import time
 import pytest
 import bagit
 
-from oulibq.tasks.utils import is_private, mmsid_exists, find_bag, is_bag_valid, is_tombstone, is_older_than
+from oulibq.tasks.utils import is_private, mmsid_exists, find_bag,\
+    is_bag_valid, is_tombstone, is_older_than, get_metadata
 from oulibq.tasks.config import bag_locations
+
+from bson.objectid import ObjectId
+from pymongo.mongo_client import MongoClient
+from pymongo.cursor import Cursor
+
+from six import PY2
+
+if PY2:
+    from mock import MagicMock, Mock, patch
+else:
+    from unittest.mock import MagicMock, Mock, patch
+
+@patch("oulibq.tasks.utils.Celery.backend")
+@patch.object(Cursor, "count")
+def test_get_metadata_no_existing_match(mock_cursor, mock_backend):
+    mock_backend.database.client = MongoClient()
+    mock_cursor.return_value = 0
+    bag_data = get_metadata("Fake_Bag_2021")
+    assert bag_data['bag'] == "Fake_Bag_2021"
+    # The schema is pulling from the 'inventory_metadata' dictionary from the config.py file
+    assert "locations" in bag_data.keys()
+    assert bag_data["locations"]["s3"]["exists"] is False
 
 
 def test_private_bags():
