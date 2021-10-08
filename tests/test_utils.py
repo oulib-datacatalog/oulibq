@@ -8,7 +8,7 @@ import bagit
 
 from oulibq.tasks.utils import is_private, mmsid_exists, find_bag,\
     is_bag_valid, is_tombstone, is_older_than, get_metadata
-from oulibq.tasks.config import bag_locations
+from oulibq.tasks.config import BAG_LOCATIONS
 
 from bson.objectid import ObjectId
 from pymongo.mongo_client import MongoClient
@@ -20,6 +20,7 @@ if PY2:
     from mock import MagicMock, Mock, patch
 else:
     from unittest.mock import MagicMock, Mock, patch
+
 
 @patch("oulibq.tasks.utils.Celery.backend")
 @patch.object(Cursor, "count")
@@ -66,13 +67,13 @@ def test_find_bag(tmpdir):
     norfile_dir = tmpdir / "norfile"
     norfile_dir.mkdir()
 
-    bag_locations["nas"]["bagit"] = str(tmpdir)
-    bag_locations["norfile"]["bagit"] = str(norfile_dir)
+    BAG_LOCATIONS["nas"]["bagit"] = str(tmpdir)
+    BAG_LOCATIONS["norfile"]["bagit"] = str(norfile_dir)
 
     assert find_bag("private/test_bag") == (
-        bag_locations["nas"]["bagit"] + '/private/test_bag',
-        bag_locations["norfile"]["bagit"],
-        bag_locations["s3"]["bucket"],
+        BAG_LOCATIONS["nas"]["bagit"] + '/private/test_bag',
+        BAG_LOCATIONS["norfile"]["bagit"],
+        BAG_LOCATIONS["s3"]["bucket"],
         'private/private/test_bag',
         'private'
     )

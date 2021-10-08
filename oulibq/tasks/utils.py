@@ -20,13 +20,17 @@ try:
 except ImportError:
     Path = None
 
-from .config import inventory_metadata, bag_locations, private_locations
+from .config import INVENTORY_METADATA, BAG_LOCATIONS, PRIVATE_LOCATIONS
 from .config import DEFAULT_DAYS_TO_WAIT
 
 app = Celery()
 app.config_from_object(celeryconfig)
 
 logging.basicConfig(level=logging.INFO)
+
+
+class BagNotFoundError(BaseException):
+    pass
 
 
 def query_metadata(search, **kwargs):
@@ -47,7 +51,7 @@ def get_metadata(bagname):
     result = digital_objects.find({'bag': bagname}).limit(1)
     if result.count():
         return result[0]
-    schema = deepcopy(inventory_metadata)
+    schema = deepcopy(INVENTORY_METADATA)
     schema['bag'] = bagname
     return schema
 
@@ -127,6 +131,7 @@ def is_older_than(path, days=DEFAULT_DAYS_TO_WAIT):
 
 def list_older(items, days=DEFAULT_DAYS_TO_WAIT):
     """ check list of paths returning a list of those with a modified time older than specified days """
+    items = items if type(items) is list else [items]
     directories = [item for item in items if os.path.isdir(item)]
     older_map = map(partial(is_older_than, days=days), directories)
     older_bags = [directories[i] for i, x in enumerate(older_map) if x is True]
@@ -135,6 +140,7 @@ def list_older(items, days=DEFAULT_DAYS_TO_WAIT):
 
 def _filter_bags(items, valid=True, limit_older=True, days=DEFAULT_DAYS_TO_WAIT):
     """ filter list of bagged items by validity and age """
+    items = items if type(items) is list else [items]
     if limit_older:
         directories = list_older(items, days=days)
     else:
@@ -150,22 +156,23 @@ def list_invalid(bags, limit_older=True, days=DEFAULT_DAYS_TO_WAIT):
 
 
 def list_valid(bags, limit_older=True, days=DEFAULT_DAYS_TO_WAIT):
+    """ filter list of bags returning list of valid bags """
     return _filter_bags(bags, valid=True, limit_older=limit_older, days=days)
 
 
 def iterate_bags(paths):
     for path in paths:
         for directory in os.listdir(path):
-            if directory not in private_locations:
+            if directory not in PRIVATE_LOCATIONS:
                 yield os.path.join(path, directory)
-        for location in private_locations:
+        for location in PRIVATE_LOCATIONS:
             for directory in os.listdir(os.path.join(path, location)):
                 yield os.path.join(path, location, directory)
 
 
 def is_private(bag):
     """ returns True if bag is in a private locations """
-    return any(map(bag.startswith, private_locations))
+    return any(map(bag.startswith, PRIVATE_LOCATIONS))
 
 
 def find_bag(bag):
@@ -173,17 +180,17 @@ def find_bag(bag):
     Function returns path to nas and norfile on current worker. Determines if bag is on Nas1 or Nas2.
     returns NAS Path , Norfile Path, S3 Bucket,S3 Key, S3 folder
     """
-    for location in bag_locations["nas"].values():
+    for location in BAG_LOCATIONS["nas"].values():
         if not location:
             continue
         nas_path = os.path.join(location, bag)
         if os.path.isdir(nas_path):
             break
     else:
-        raise Exception("Checked NAS locations and unable to find bag:{0}.".format(bag))
+        raise BagNotFoundError("Checked NAS locations and unable to find bag:{0}.".format(bag))
 
     s3_folder = "private" if is_private(bag) else "source"
-    return nas_path, bag_locations["norfile"]["bagit"], bag_locations["s3"]["bucket"], os.path.join(s3_folder, bag), s3_folder
+    return nas_path, BAG_LOCATIONS["norfile"]["bagit"], BAG_LOCATIONS["s3"]["bucket"], os.path.join(s3_folder, bag), s3_folder
 
 
 def mmsid_exists(bag_path):

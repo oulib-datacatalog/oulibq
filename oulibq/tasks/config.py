@@ -4,7 +4,7 @@ DEFAULT_DAYS_TO_WAIT = 2  # wait this number of days before processing a bag usi
 
 paths = [os.getenv("LOCAL_BAGIT_SRC_PATH"), os.getenv("REMOTE_BAGIT_SRC_PATH")]
 
-bag_locations = {
+BAG_LOCATIONS = {
     "s3": {"bucket": "ul-bagit"},
     "nas": {
         "bagit": os.getenv('REMOTE_BAGIT_SRC_PATH', None),
@@ -13,9 +13,9 @@ bag_locations = {
     "norfile": {"bagit": os.getenv('REMOTE_BAGIT_DEST_PATH', None)}
 }
 
-private_locations = ['shareok', 'preservation', 'private', 'external-preservation']
+PRIVATE_LOCATIONS = ['shareok', 'preservation', 'private', 'external-preservation']
 
-inventory_metadata = {
+INVENTORY_METADATA = {
     'derivatives': {},
     'project': '',
     'department': '',
