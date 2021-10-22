@@ -228,6 +228,8 @@ def calculate_multipart_etag(source_path, etag, chunk_size=8):
         chunk_size -- The chunk size to calculate for. Default 8
     """
     md5s = []
+    etag_parts = etag.split("-")
+    num_parts = etag_parts[1] if len(etag_parts) > 1 else None
     chunk_size = chunk_size * 1024 * 1024
     with open(source_path, 'rb') as fp:
         while True:
@@ -235,6 +237,15 @@ def calculate_multipart_etag(source_path, etag, chunk_size=8):
             if not data:
                 break
             md5s.append(hashlib.md5(data))
+    
+    if not md5s:
+        return False
+
+    # if hash of first chunk matches etag and
+    # etag does not list number of chunks
+    if md5s[0].hexdigest() == etag and not num_parts:
+        return True
+
     digests = b"".join(m.digest() for m in md5s)
     new_md5 = hashlib.md5(digests)
     new_etag = '%s-%s' % (new_md5.hexdigest(), len(md5s))
