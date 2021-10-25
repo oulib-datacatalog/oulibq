@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 from os import utime
-from sys import version_info
 import time
 
 import pytest
@@ -115,7 +114,7 @@ def test_is_older_than(tmpdir):
     # Change file timestamp to two days ago
     now = datetime.now()
     two_days_ago = now - timedelta(days=2)
-    if version_info.major == 2:  # handle Python 2.x
+    if PY2:  # handle Python 2.x
         timestamp_2_days_ago = time.mktime(two_days_ago.timetuple())
     else:
         timestamp_2_days_ago = two_days_ago.timestamp()
