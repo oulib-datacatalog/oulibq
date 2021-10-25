@@ -2,7 +2,7 @@ import os
 
 DEFAULT_DAYS_TO_WAIT = 2  # wait this number of days before processing a bag using modified timestamp
 
-paths = [os.getenv("LOCAL_BAGIT_SRC_PATH"), os.getenv("REMOTE_BAGIT_SRC_PATH")]
+#paths = [os.getenv("LOCAL_BAGIT_SRC_PATH"), os.getenv("REMOTE_BAGIT_SRC_PATH")]
 
 BAG_LOCATIONS = {
     "s3": {"bucket": "ul-bagit"},

@@ -14,11 +14,10 @@ try:
 except ImportError:
     celeryconfig = None
 
-try:
-    # use Path if running with Python 3.4+
+from six import PY2, PY3
+
+if PY3:
     from pathlib import Path
-except ImportError:
-    Path = None
 
 from .config import INVENTORY_METADATA, BAG_LOCATIONS, PRIVATE_LOCATIONS
 from .config import DEFAULT_DAYS_TO_WAIT
@@ -98,7 +97,7 @@ def is_tombstone(path):
 def touch_file(path):
     """ touches the file at path, creating it or updating its modified timestamp """
     try:
-        if Path:  # running in python 3.4+
+        if PY3:
             Path(path).touch()
             return True
         else:
@@ -160,7 +159,14 @@ def list_valid(bags, limit_older=True, days=DEFAULT_DAYS_TO_WAIT):
     return _filter_bags(bags, valid=True, limit_older=limit_older, days=days)
 
 
-def iterate_bags(paths):
+def iterate_bags(paths=BAG_LOCATIONS['nas']):
+    if isinstance(paths, str):
+        paths = [paths]
+    if isinstance(paths, dict):
+        if PY2:
+            paths = paths.values()
+        else:
+            paths = list(paths.values())
     for path in paths:
         for directory in os.listdir(path):
             if directory not in PRIVATE_LOCATIONS:

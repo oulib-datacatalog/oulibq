@@ -6,8 +6,8 @@ import pytest
 import bagit
 
 from oulibq.tasks.utils import is_private, mmsid_exists, find_bag,\
-    is_bag_valid, is_tombstone, is_older_than, get_metadata
-from oulibq.tasks.config import BAG_LOCATIONS
+    is_bag_valid, is_tombstone, is_older_than, get_metadata, iterate_bags
+from oulibq.tasks.config import BAG_LOCATIONS, PRIVATE_LOCATIONS
 
 from bson.objectid import ObjectId
 from pymongo.mongo_client import MongoClient
@@ -120,3 +120,26 @@ def test_is_older_than(tmpdir):
         timestamp_2_days_ago = two_days_ago.timestamp()
     utime(str(empty_file), (timestamp_2_days_ago, timestamp_2_days_ago))
     assert is_older_than(str(empty_file), 2) is True
+
+
+def test_iterate_bags(tmpdir):
+    bag1 = tmpdir / "bag1"
+    bag1.mkdir()
+    bag2 = tmpdir / "bag2"
+    bag2.mkdir()
+
+    for location in PRIVATE_LOCATIONS:
+        tmp = bag1 / location
+        tmp.mkdir()
+        tmp = bag2 / location
+        tmp.mkdir()
+
+    test_bag = bag1 / "test_bag_2021"
+    test_bag.mkdir()
+
+    patch_paths = patch.dict(BAG_LOCATIONS['nas'], {"bagit": str(bag1), "bagit2": str(bag2)})
+
+    patch_paths.start()
+    bags = list(iterate_bags())
+    assert bags == [str(test_bag)]
+    patch_paths.stop()
