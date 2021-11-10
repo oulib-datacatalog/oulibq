@@ -183,7 +183,6 @@ def copy_bag(self, bag_name, source_path, dest_path):
 
     msg = ensure_text("Bag copied from {0} to {1}").format(source, dest)
     log.close()
-    log.close()
     return msg
 
 
@@ -222,8 +221,8 @@ def upload_bag_s3(self, bag_name, source_path, s3_bucket, s3_location):
     return msg
 
 
-@task()
-def remove_nas_files(bag_name):
+@task(bind=True)
+def remove_nas_files(self, bag_name):
     """
     Remove NAS bag
     agrs:
@@ -231,8 +230,13 @@ def remove_nas_files(bag_name):
     """
     inventory_metadata = get_metadata(bag_name)
     nas_metadata = inventory_metadata['locations']['nas']
+    norfile_valid = inventory_metadata['locations']['norfile']['valid']
+    s3_valid = inventory_metadata['locations']['s3']['valid']
     bag_location = nas_metadata['location']
-    if (not bag_location == "/") and (len(bag_location) > 15) and (sanitize_path(bag_location) == bag_location):
+
+    if not norfile_valid and not s3_valid:
+        raise Exception(ensure_text("{0} is not fully replicated - not removing from NAS!").format(bag_name))
+    elif (not bag_location == "/") and (len(bag_location) > 15) and (sanitize_path(bag_location) == bag_location):
         if not nas_metadata['exists']:
             raise Exception(ensure_text("Bag: {0} has already been removed").format(bag_name))
         try:
@@ -248,6 +252,6 @@ def remove_nas_files(bag_name):
         finally:
             upsert_metadata(inventory_metadata)
     else:
-        msg = ensure_text("Suspicious Bag location: Security Error - {0}").format(bag_location)
+        msg = ensure_text("Suspicious Bag location set for removal from task {0}: {1}").format(self.request.id, bag_location)
         logging.error(msg)
         raise Exception(msg)

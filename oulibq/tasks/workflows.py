@@ -1,18 +1,18 @@
 import logging
 
 from celery.task import task
-from celery import chain
+from celery import chain, group, signature
 from six import ensure_text
 from .config import BAG_LOCATIONS
-from .utils import get_metadata, find_bag, BagNotFoundError,
+from .utils import get_metadata, find_bag, BagNotFoundError
 from .tasks import validate_nas_files, remove_nas_files, copy_bag, validate_norfile_bag
 from .tasks import upload_bag_s3, validate_s3_files
 
 logging.basicConfig(level=logging.INFO)
 
 
-@task()
-def replicate(bag, project=None, department=None, force=False):
+@task(bind=True)
+def replicate(self, bag, project=None, department=None, force=False):
     """
     This task validates and replicates a single bag to Norfile and AWS S3
 
@@ -28,7 +28,10 @@ def replicate(bag, project=None, department=None, force=False):
         logging.exception(ensure_text("Could not find bag: {0}").format(bag))
         return {"error": "Could not find specified bag!"}
 
+    queue_name = self.request.delivery_info['routing_key']
     metadata = get_metadata(bag)
+    nas_exists = metadata["locations"]["nas"]["exists"]
+    nas_tombstone = metadata["locations"]["nas"]["place_holder"]
     norfile_exists = metadata["locations"]["norfile"]["exists"]
     norfile_valid = metadata["locations"]["norfile"]["valid"]
     s3_exists = metadata["locations"]["s3"]["exists"]
@@ -40,32 +43,45 @@ def replicate(bag, project=None, department=None, force=False):
         metadata["department"] = department
 
     # Celery signatures of used tasks
-    validate_nas = validate_nas_files.si(bag, nas_path)
-    copy_to_norfile = copy_bag.si(bag, nas_path, norfile_path)
-    validate_norfile = validate_norfile_bag.si(bag, norfile_path)
-    upload_to_s3 = upload_bag_s3.si(bag, nas_path, s3_bucket, s3_key)
-    validate_s3 = validate_s3_files.si(bag, nas_path, s3_bucket, s3_folder)
-    remove_from_nas = remove_nas_files.si(bag)
+    validate_nas = validate_nas_files.si(bag, nas_path).set(queue=queue_name)
+    copy_to_norfile = copy_bag.si(bag, nas_path, norfile_path).set(queue=queue_name)
+    validate_norfile = validate_norfile_bag.si(bag, norfile_path).set(queue=queue_name)
+    upload_to_s3 = upload_bag_s3.si(bag, nas_path, s3_bucket, s3_key).set(queue=queue_name)
+    validate_s3 = validate_s3_files.si(bag, nas_path, s3_bucket, s3_folder).set(queue=queue_name)
+    remove_from_nas = remove_nas_files.si(bag).set(queue=queue_name)
 
-    # Build up list of tasks to perform
-    actions = [validate_nas]
-
-    if not norfile_exists or force:
-        actions.extend((copy_to_norfile, validate_norfile))
+    if not norfile_exists and not s3_exists:
+        workflow = chain(
+            validate_nas,
+            group(
+                chain(copy_to_norfile, validate_norfile),
+                chain(upload_to_s3, validate_s3)
+            ),
+            remove_from_nas  # TODO: confirm that the workflow stops before here if replication fails above - write tests
+        )
+    elif (norfile_exists and not norfile_valid) and (s3_exists and not s3_valid):
+        workflow = chain(
+            validate_nas,
+            validate_norfile,
+            validate_s3,
+            remove_from_nas
+        )
     elif norfile_exists and not norfile_valid:
-        actions.append(validate_norfile)
-
-    if not s3_exists or force:
-        actions.extend((upload_to_s3, validate_s3))
+        workflow = chain(
+            validate_nas,
+            validate_norfile,
+            remove_from_nas
+        )
     elif s3_exists and not s3_valid:
-        actions.append(validate_s3)
-
-    if norfile_valid and s3_valid:
-        actions.append(remove_from_nas)
+        workflow = chain(
+            validate_nas,
+            validate_s3,
+            remove_from_nas
+        )
 
     # Kick off workflow
-    logging.info(ensure_text("Kicking off replication tasks on {0}: {1}").format(bag, actions))
-    chain(actions).delay()  # https://docs.celeryproject.org/en/stable/userguide/canvas.html#chains
+    logging.info(ensure_text("Kicking off replication tasks on {0}: {1}").format(bag, workflow))
+    workflow.delay()  # https://docs.celeryproject.org/en/stable/userguide/canvas.html#chains
     return {"ok": "Kicked off replication!"}
 
 
