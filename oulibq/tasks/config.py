@@ -34,12 +34,14 @@ INVENTORY_METADATA = {
             'exists': False,
             'valid': False,
             'validation_date': '',
-            'location': 'UL-BAGIT'
+            'location': 'UL-BAGIT',
+            'error': ''
         },
         'nas': {
             'exists': False,
             'place_holder': False,
-            'location': ''
+            'location': '',
+            'error': ''
         }
     }
 }
