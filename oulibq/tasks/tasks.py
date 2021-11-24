@@ -7,8 +7,11 @@ from six import ensure_text
 from subprocess import call
 from botocore.exceptions import ClientError
 from celery import states
-from celery.task import task
 from celery.exceptions import Ignore
+
+from celery import Celery
+app = Celery()
+task = app.task
 
 from .utils import get_metadata, upsert_metadata, is_tombstone, is_bag_valid, calculate_multipart_etag, query_metadata
 from .utils import touch_file, sanitize_path

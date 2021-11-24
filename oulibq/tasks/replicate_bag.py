@@ -1,10 +1,13 @@
-from celery.task import task
 import os, sys, boto3, requests, json, time
 from .bag_migration import get_celery_worker_config, copy_bag, upload_bag_s3
 from .tasks import clean_nas_files, validate_nas_files, validate_s3_files, validate_norfile_bag
 import ConfigParser
 import logging
 from datetime import datetime
+
+from celery import Celery
+app = Celery()
+task = app.task
 
 from celery import signature, chain, group
 
