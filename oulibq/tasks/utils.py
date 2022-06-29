@@ -5,6 +5,7 @@ import re
 import time
 from copy import deepcopy
 from functools import partial
+from warnings import warn
 
 import bagit
 from bson.objectid import ObjectId
@@ -13,6 +14,7 @@ try:
     import celeryconfig
 except ImportError:
     celeryconfig = None
+    warn("celeryconfig not imported")
 
 from six import PY2, PY3
 

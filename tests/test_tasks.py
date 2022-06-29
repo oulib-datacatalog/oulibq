@@ -1,7 +1,7 @@
 import pytest
 from copy import deepcopy
 
-from oulibq.tasks.tasks import validate_nas_files
+from oulibq.tasks.tasks import validate_nas_files, remove_nas_files
 from oulibq.tasks.config import INVENTORY_METADATA
 
 import bagit
@@ -29,3 +29,23 @@ def test_validate_nas_files(mock_get_metadata, mock_upsert, tmpdir):
     mock_get_metadata.assert_called_with('test_bag')
     mock_upsert.assert_called_with(copy_metadata)
 
+
+@patch('oulibq.tasks.tasks.get_metadata')
+def test_remove_nas_files(mock_get_metadata, tmpdir):
+    mock_get_metadata.return_value = deepcopy(INVENTORY_METADATA)
+    copy_metadata = deepcopy(INVENTORY_METADATA)
+
+    copy_metadata['locations']['norfile']['valid'] = False
+    copy_metadata['locations']['s3']['valid'] = False
+    with pytest.raises(Exception):
+        remove_nas_files('test_bag')
+
+    copy_metadata['locations']['norfile']['valid'] = True
+    copy_metadata['locations']['s3']['valid'] = False
+    with pytest.raises(Exception):
+        remove_nas_files('test_bag')
+
+    copy_metadata['locations']['norfile']['valid'] = False
+    copy_metadata['locations']['s3']['valid'] = True
+    with pytest.raises(Exception):
+        remove_nas_files('test_bag')

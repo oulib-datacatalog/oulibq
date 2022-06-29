@@ -1,12 +1,15 @@
 import logging
 
-from celery.task import task
 from celery import chain, group, signature
 from six import ensure_text
 from .config import BAG_LOCATIONS
 from .utils import get_metadata, find_bag, BagNotFoundError
 from .tasks import validate_nas_files, remove_nas_files, copy_bag, validate_norfile_bag
 from .tasks import upload_bag_s3, validate_s3_files
+
+from celery import Celery
+app = Celery()
+task = app.task
 
 logging.basicConfig(level=logging.INFO)
 
