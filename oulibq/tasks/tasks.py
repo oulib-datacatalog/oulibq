@@ -15,6 +15,8 @@ task = app.task
 
 from .utils import get_metadata, upsert_metadata, is_tombstone, is_bag_valid, calculate_multipart_etag, query_metadata
 from .utils import touch_file, sanitize_path
+from .config import NotFullyReplicated, SuspiciousLocation, BagDoesNotExist
+
 
 import logging
 
@@ -127,8 +129,6 @@ def validate_norfile_bag(bag_name, local_source_path):
         norfile_metadata['valid'] = False
     upsert_metadata(inventory_metadata)
     return {'status': "SUCCESS", 'args': [bag_name, local_source_path], 'norfile': norfile_metadata}
-
-
 @task()
 def clean_nas_files():
     """
@@ -150,8 +150,6 @@ def clean_nas_files():
             errors.append(str(e))
     bag_errors = ", ".join(errors)
     return ensure_text("Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ").format(removed, len(errors), bag_errors)
-
-
 @task(bind=True)
 def copy_bag(self, bag_name, source_path, dest_path):
     """
@@ -223,7 +221,6 @@ def upload_bag_s3(self, bag_name, source_path, s3_bucket, s3_location):
         os.remove(ensure_text("{0}.tmp").format(task_id))
     return msg
 
-
 @task(bind=True)
 def remove_nas_files(self, bag_name):
     """
@@ -237,11 +234,11 @@ def remove_nas_files(self, bag_name):
     s3_valid = inventory_metadata['locations']['s3']['valid']
     bag_location = nas_metadata['location']
 
-    if not norfile_valid and not s3_valid:
-        raise Exception(ensure_text("{0} is not fully replicated - not removing from NAS!").format(bag_name))
+    if not norfile_valid or not s3_valid:
+        raise NotFullyReplicated(ensure_text("{0} is not fully replicated - not removing from NAS!").format(bag_name))
     elif (not bag_location == "/") and (len(bag_location) > 15) and (sanitize_path(bag_location) == bag_location):
         if not nas_metadata['exists']:
-            raise Exception(ensure_text("Bag: {0} has already been removed").format(bag_name))
+            raise BagDoesNotExist(ensure_text("Bag: {0} has already been removed").format(bag_name))
         try:
             shutil.rmtree(bag_location)
             nas_metadata['exists'] = False
@@ -253,8 +250,8 @@ def remove_nas_files(self, bag_name):
             logging.error(msg)
             nas_metadata['error'] = msg
         finally:
-            upsert_metadata(inventory_metadata)
+            upsert_metadata(inventory_metadata)    
     else:
         msg = ensure_text("Suspicious Bag location set for removal from task {0}: {1}").format(self.request.id, bag_location)
         logging.error(msg)
-        raise Exception(msg)
+        raise SuspiciousLocation(msg)
