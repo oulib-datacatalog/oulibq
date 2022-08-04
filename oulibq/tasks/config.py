@@ -45,3 +45,11 @@ INVENTORY_METADATA = {
         }
     }
 }
+
+
+class NotFullyReplicated(Exception):
+    pass
+class SuspiciousLocation(Exception):
+    pass
+class BagDoesNotExist(Exception):
+    pass
