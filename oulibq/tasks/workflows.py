@@ -60,7 +60,7 @@ def replicate(self, bag, project=None, department=None, force=False):
                 chain(copy_to_norfile, validate_norfile),
                 chain(upload_to_s3, validate_s3)
             ),
-            remove_from_nas  # TODO: confirm that the workflow stops before here if replication fails above - write tests
+            remove_from_nas
         )
     elif (norfile_exists and not norfile_valid) and (s3_exists and not s3_valid):
         workflow = chain(
