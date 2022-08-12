@@ -61,3 +61,37 @@ def test_replicate(mock_Task_request, mock_find_bag, mock_celery_group, mock_cel
         validate_norfile,
         remove_from_nas
     )
+
+    mock_celery_chain.reset_mock()
+    mock_celery_group.reset_mock()
+
+    copy_metadata["locations"]["norfile"]["exists"] = False
+    copy_metadata["locations"]["s3"]["exists"] = False
+    mock_get_metadata.return_value = copy_metadata
+    replicate(bag, project, department)
+    assert mock_celery_chain.call_count == 3
+    assert mock_celery_group.call_count == 1
+    assert mock_celery_chain.called_with(
+        validate_nas,
+        mock_celery_group,
+        remove_from_nas
+    )
+    assert mock_celery_group.called_with(
+        mock_celery_chain,
+        mock_celery_chain
+    )
+
+    # Brute force the nested calls to make sure the correct tasks are called
+    # modifying the workflow will require changing the orders indicated in these indices
+    assert mock_celery_chain.call_args_list[0][0][0] != upload_to_s3
+    assert mock_celery_chain.call_args_list[0][0][0] == copy_to_norfile
+    assert mock_celery_chain.call_args_list[0][0][1] == validate_norfile
+    assert mock_celery_chain.call_args_list[1][0][0] != validate_nas
+    assert mock_celery_chain.call_args_list[1][0][0] == upload_to_s3
+    assert mock_celery_chain.call_args_list[1][0][1] == validate_s3
+    assert mock_celery_chain.call_args_list[2][0][0] == validate_nas
+    assert mock_celery_chain.call_args_list[2][0][1] == mock_celery_group()
+    assert mock_celery_chain.call_args_list[2][0][2] == remove_from_nas
+
+    assert mock_celery_group.call_args_list[0][0][0] == mock_celery_chain()
+    assert mock_celery_group.call_args_list[0][0][1] == mock_celery_chain()
