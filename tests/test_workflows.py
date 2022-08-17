@@ -12,6 +12,8 @@ if PY2:
     from mock import MagicMock, Mock, patch
 else:
     from unittest.mock import MagicMock, Mock, patch
+
+
 @patch('oulibq.tasks.workflows.get_metadata')
 @patch('oulibq.tasks.workflows.chain')
 @patch('oulibq.tasks.workflows.group')
