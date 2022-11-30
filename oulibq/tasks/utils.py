@@ -130,10 +130,10 @@ def is_older_than(path, days=DEFAULT_DAYS_TO_WAIT):
     return (time.time() - os.stat(path).st_mtime) >= seconds
 
 
-def list_older(items, days=DEFAULT_DAYS_TO_WAIT):
+def list_older(paths, days=DEFAULT_DAYS_TO_WAIT):
     """ check list of paths returning a list of those with a modified time older than specified days """
-    items = items if type(items) is list else [items]
-    directories = [item for item in items if os.path.isdir(item)]
+    paths = paths if isinstance(paths, list) else [paths]
+    directories = [_path for _path in paths if os.path.isdir(_path)]
     older_map = map(partial(is_older_than, days=days), directories)
     older_bags = [directories[i] for i, x in enumerate(older_map) if x is True]
     return older_bags
@@ -141,7 +141,7 @@ def list_older(items, days=DEFAULT_DAYS_TO_WAIT):
 
 def _filter_bags(items, valid=True, limit_older=True, days=DEFAULT_DAYS_TO_WAIT):
     """ filter list of bagged items by validity and age """
-    items = items if type(items) is list else [items]
+    items = items if isinstance(items, list) else [items]
     if limit_older:
         directories = list_older(items, days=days)
     else:
@@ -170,12 +170,13 @@ def iterate_bags(paths=BAG_LOCATIONS['nas']):
         else:
             paths = list(paths.values())
     for path in paths:
-        for directory in os.listdir(path):
-            if directory not in PRIVATE_LOCATIONS:
-                yield os.path.join(path, directory)
-        for location in PRIVATE_LOCATIONS:
-            for directory in os.listdir(os.path.join(path, location)):
-                yield os.path.join(path, location, directory)
+        if path:
+            for directory in os.listdir(path):
+                if directory not in PRIVATE_LOCATIONS:
+                    yield os.path.join(path, directory)
+            for location in PRIVATE_LOCATIONS:
+                for directory in os.listdir(os.path.join(path, location)):
+                    yield os.path.join(path, location, directory)
 
 
 def is_private(bag):

@@ -1,11 +1,15 @@
+import time
 from copy import deepcopy
-from requests import patch
+from datetime import datetime, timedelta
+from os import utime
+
+import bagit
 import pytest
+from requests import patch
 from oulibq.tasks.config import INVENTORY_METADATA
 from oulibq.tasks.workflows import replicate, managed_replication
 from oulibq.tasks.config import BAG_LOCATIONS
-import pytest
-import bagit
+from oulibq.tasks.utils import is_older_than
 from six import PY2
 
 if PY2:
@@ -135,3 +139,44 @@ def test_replicate(mock_Task_request, mock_find_bag, mock_celery_group, mock_cel
     ) 
 
     
+def test_replicate_bag_does_not_exist():
+    assert replicate("doesnotexist") == {'error': 'Could not find specified bag!'}
+
+
+@patch('oulibq.tasks.workflows.iterate_bags')
+@patch('oulibq.tasks.workflows.replicate')
+def test_managed_replication(mock_replicate, mock_iterate_bags, tmpdir):
+    bag_dir = tmpdir / "test_bag"
+    bag_dir.mkdir()
+    test_file = bag_dir / "test.txt"
+    test_file.write("testing...")
+    bag = bagit.make_bag(str(bag_dir), checksums=["md5", "sha256"])
+
+    assert bag.is_valid() is True
+
+    # Change file timestamp to two days ago
+    now = datetime.now()
+    two_days_ago = now - timedelta(days=2)
+    if PY2:  # handle Python 2.x
+        timestamp_2_days_ago = time.mktime(two_days_ago.timetuple())
+    else:
+        timestamp_2_days_ago = two_days_ago.timestamp()
+    utime(str(bag_dir), (timestamp_2_days_ago, timestamp_2_days_ago))
+
+    assert is_older_than(str(bag_dir), 2) is True
+
+    patch_paths = patch.dict(BAG_LOCATIONS['nas'], {"bagit": str(bag_dir)})
+    patch_paths.start()
+    mock_iterate_bags.return_value = iter([str(bag_dir)])
+    assert managed_replication() == {'ok': 'Kicked off managed replications!'}
+    patch_paths.stop()
+
+
+@patch('oulibq.tasks.workflows.iterate_bags')
+def test_managed_replication_no_valid_bags(mock_iterate_bags):
+    mock_iterate_bags.return_value = iter(["not_valid"])
+    assert managed_replication() == {'error': 'No valid bags available for replication!'}
+
+
+def test_managed_replication_no_available_bags():
+    assert managed_replication() == {'error': 'No bags available!'}

@@ -1,11 +1,15 @@
 import logging
 
+from random import sample
 from celery import chain, group, signature
-from six import ensure_text
+from six import ensure_text, PY2
 from .config import BAG_LOCATIONS
-from .utils import get_metadata, find_bag, BagNotFoundError
+from .utils import get_metadata, find_bag, iterate_bags, list_valid, BagNotFoundError
 from .tasks import validate_nas_files, remove_nas_files, copy_bag, validate_norfile_bag
 from .tasks import upload_bag_s3, validate_s3_files
+
+if PY2:
+    FileNotFoundError = OSError
 
 from celery import Celery
 app = Celery()
@@ -89,13 +93,21 @@ def replicate(self, bag, project=None, department=None, force=False):
 
 
 @task()
-def managed_replication():
+def managed_replication(count=10):
     """
     This task searches for bags ready for replication and kicks off the replication workflow
+    args:
+        count - optional number of bags to process, defaults to 10
     """
-    # TODO add code to find bags and confirm kick off of replication tasks
-    bags = []  # find subset of bags ready for replication
-    logging.info(ensure_text("Kicking off managed replications of: {0}").format(bags))
-    for bag in bags:
+    try:
+        bags = list(iterate_bags())
+    except FileNotFoundError:
+        return {"error": "No bags available!"}
+    bag_selection = sample(bags, k=count) if len(bags) >= count else bags
+    valid_bags = list_valid(bag_selection)
+    if not valid_bags:
+        return {"error": "No valid bags available for replication!"}
+    logging.info(ensure_text("Kicking off managed replications of: {0}").format(valid_bags))
+    for bag in valid_bags:
         replicate.si(bag).delay()
     return {"ok": "Kicked off managed replications!"}
