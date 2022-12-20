@@ -263,17 +263,34 @@ def remove_nas_files(self, bag_name):
         raise SuspiciousLocation(msg)
 
 
-@task()
-def move_bag_nas(bag_name, source_path, destination_path):
+@task(bind=True)
+def move_bag_nas(self, source_path, destination_path):
     """
     Move / Rename a bag accessible on the DigiLab NAS
 
     args:
-        bag_name - name of bag to move
         source_path - current location of bag 
         destination_path - location to move bag
     """
-    pass
+    
+    if not os.path.exists(ensure_text("{0}/bagit.txt".format(source_path))):
+        raise NotABag(ensure_text("The source {0} is not a bag!".format(source_path)))
+
+    if os.path.exists(destination_path):
+        raise BagAlreadyExists("The destination already exists! Try using a different destination")
+
+    task_id = str(self.request.id)
+    log = open("{0}.tmp".format(task_id), "w+")
+    status = call(['sudo', 'rsync', '-rltD', '--delete', source_path, destination_path], stderr=log)
+    if status != 0:
+        log.seek(0)
+        msg = log.read()
+        log.close()
+        os.remove(ensure_text("{0}.tmp").format(task_id))
+        self.update_state(state=states.FAILURE, meta=msg)
+        raise Ignore()
+    
+    logging.info("Moved NAS files from {0} to {1}".format(source_path, destination_path))
 
 
 @task()
@@ -321,12 +338,11 @@ def move_bag_s3(source_path, destination_path):
             source_key = item["Key"]
             s3.delete_object(Bucket=s3_bucket, Key=source_key)
 
-    # Update catalog with new location
+    # Update catalog with new s3 location
     bag_name = source_path.split("/")[-1]
     metadata = query_metadata({"bag": bag_name}, {"locations.s3.verified":1})[0]
     updated_verfied = [item.replace(source_path, destination_path) for item in metadata["locations"]["s3"]["verified"]]
     metadata["locations"]["s3"]["verified"] = updated_verfied
     update_metadata_subfield(metadata)
 
-
-    return "Moved {0} to {1}".format(source_path, destination_path)
+    logging.info("Moved S3 objects from {0} to {1}".format(source_path, destination_path))
