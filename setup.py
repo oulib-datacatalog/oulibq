@@ -14,6 +14,7 @@ setup(name='oulibq',
           'pymongo==3.12.1',
           'requests==2.26.0',
           'bagit==1.8.1',
+          'awscli',
           'six==1.16.0',
       ],
 )

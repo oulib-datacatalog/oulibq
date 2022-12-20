@@ -14,8 +14,9 @@ app = Celery()
 task = app.task
 
 from .utils import get_metadata, upsert_metadata, is_tombstone, is_bag_valid, calculate_multipart_etag, query_metadata
-from .utils import touch_file, sanitize_path
-from .config import NotFullyReplicated, SuspiciousLocation, BagDoesNotExist
+from .utils import touch_file, sanitize_path, update_metadata_subfield
+from .config import BAG_LOCATIONS
+from .config import NotFullyReplicated, SuspiciousLocation, BagDoesNotExist, BagAlreadyExists, NotABag
 
 
 import logging
@@ -129,6 +130,8 @@ def validate_norfile_bag(bag_name, local_source_path):
         norfile_metadata['valid'] = False
     upsert_metadata(inventory_metadata)
     return {'status': "SUCCESS", 'args': [bag_name, local_source_path], 'norfile': norfile_metadata}
+
+
 @task()
 def clean_nas_files():
     """
@@ -150,6 +153,8 @@ def clean_nas_files():
             errors.append(str(e))
     bag_errors = ", ".join(errors)
     return ensure_text("Bags removed: {0}, Bags removal Errors: {1} Bags with Errors:{2} ").format(removed, len(errors), bag_errors)
+
+
 @task(bind=True)
 def copy_bag(self, bag_name, source_path, dest_path):
     """
@@ -221,6 +226,7 @@ def upload_bag_s3(self, bag_name, source_path, s3_bucket, s3_location):
         os.remove(ensure_text("{0}.tmp").format(task_id))
     return msg
 
+
 @task(bind=True)
 def remove_nas_files(self, bag_name):
     """
@@ -255,3 +261,72 @@ def remove_nas_files(self, bag_name):
         msg = ensure_text("Suspicious Bag location set for removal from task {0}: {1}").format(self.request.id, bag_location)
         logging.error(msg)
         raise SuspiciousLocation(msg)
+
+
+@task()
+def move_bag_nas(bag_name, source_path, destination_path):
+    """
+    Move / Rename a bag accessible on the DigiLab NAS
+
+    args:
+        bag_name - name of bag to move
+        source_path - current location of bag 
+        destination_path - location to move bag
+    """
+    pass
+
+
+@task()
+def move_bag_s3(source_path, destination_path):
+    """
+    Move / Rename a bag accessible in the default S3 bucket
+
+    args:
+        source_path - current location of bag 
+        destination_path - location to move bag
+    """
+    
+    s3_bucket = BAG_LOCATIONS["s3"]["bucket"]
+    s3 = boto3.client("s3")
+    paginator = s3.get_paginator("list_objects_v2")
+
+    try:
+        s3.head_object(Bucket=s3_bucket, Key=ensure_text("{0}/bagit.txt".format(source_path)))
+    except:
+        raise NotABag(ensure_text("The source {0} is not a bag!".format(source_path)))
+
+    try:
+        for page in paginator.paginate(Bucket=s3_bucket, Prefix=destination_path):
+            page["Contents"]
+            # Do not allow writing to an existing destination!
+            raise BagAlreadyExists("The destination already exists! Try using a different destination")
+    except KeyError:
+        # destination does not exist, allow writing to it
+        pass
+
+    for page in paginator.paginate(Bucket=s3_bucket, Prefix=source_path):
+        try:
+            contents = page["Contents"]
+        except KeyError:
+            raise BagDoesNotExist("Could not find bag matching request!")
+        for item in contents:
+            source_key = item["Key"]
+            destination_key = source_key.replace(source_path, destination_path)
+            copy_source = {"Bucket": s3_bucket, "Key": source_key}
+            s3.copy_object(Bucket=s3_bucket, CopySource=copy_source, Key=destination_key)
+
+    # Clean up after successful copy
+    for page in paginator.paginate(Bucket=s3_bucket, Prefix=source_path):
+        for item in page["Contents"]:
+            source_key = item["Key"]
+            s3.delete_object(Bucket=s3_bucket, Key=source_key)
+
+    # Update catalog with new location
+    bag_name = source_path.split("/")[-1]
+    metadata = query_metadata({"bag": bag_name}, {"locations.s3.verified":1})[0]
+    updated_verfied = [item.replace(source_path, destination_path) for item in metadata["locations"]["s3"]["verified"]]
+    metadata["locations"]["s3"]["verified"] = updated_verfied
+    update_metadata_subfield(metadata)
+
+
+    return "Moved {0} to {1}".format(source_path, destination_path)
