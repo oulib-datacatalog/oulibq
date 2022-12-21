@@ -281,7 +281,7 @@ def move_bag_nas(self, source_path, destination_path):
 
     task_id = str(self.request.id)
     log = open("{0}.tmp".format(task_id), "w+")
-    status = call(['sudo', 'rsync', '-rltD', '--delete', source_path, destination_path], stderr=log)
+    status = call(['rsync', '-rltD', source_path, destination_path], stderr=log)
     if status != 0:
         log.seek(0)
         msg = log.read()
@@ -289,7 +289,7 @@ def move_bag_nas(self, source_path, destination_path):
         os.remove(ensure_text("{0}.tmp").format(task_id))
         self.update_state(state=states.FAILURE, meta=msg)
         raise Ignore()
-    
+    shutil.rmtree(source_path)
     logging.info("Moved NAS files from {0} to {1}".format(source_path, destination_path))
 
 
