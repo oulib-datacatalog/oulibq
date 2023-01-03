@@ -274,9 +274,11 @@ def move_bag_nas(self, source_path, destination_path):
     """
     
     if not os.path.exists(ensure_text("{0}/bagit.txt".format(source_path))):
+        logging.error("Attempted to move non-bag: {0}".format(source_path))
         raise NotABag(ensure_text("The source {0} is not a bag!".format(source_path)))
 
     if os.path.exists(destination_path):
+        logging.error("Attempted to move bag to existing location: {0}".format(destination_path))
         raise BagAlreadyExists("The destination already exists! Try using a different destination")
 
     task_id = str(self.request.id)
@@ -286,9 +288,9 @@ def move_bag_nas(self, source_path, destination_path):
         log.seek(0)
         msg = log.read()
         log.close()
-        os.remove(ensure_text("{0}.tmp").format(task_id))
         self.update_state(state=states.FAILURE, meta=msg)
         raise Ignore()
+    os.remove("{0}.tmp").format(task_id)  # log file
     shutil.rmtree(source_path)
     logging.info("Moved NAS files from {0} to {1}".format(source_path, destination_path))
 
@@ -310,12 +312,14 @@ def move_bag_s3(source_path, destination_path):
     try:
         s3.head_object(Bucket=s3_bucket, Key=ensure_text("{0}/bagit.txt".format(source_path)))
     except:
+        logging.error("Attempted to move non-bag: {0}".format(source_path))
         raise NotABag(ensure_text("The source {0} is not a bag!".format(source_path)))
 
     try:
         for page in paginator.paginate(Bucket=s3_bucket, Prefix=destination_path):
             page["Contents"]
             # Do not allow writing to an existing destination!
+            logging.error("Attempted to move bag to existing location: {0}".format(destination_path))
             raise BagAlreadyExists("The destination already exists! Try using a different destination")
     except KeyError:
         # destination does not exist, allow writing to it
