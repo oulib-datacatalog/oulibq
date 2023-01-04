@@ -262,6 +262,9 @@ def calculate_multipart_etag(source_path,etag,chunk_size_mb=8):
                 break
             md5s.append(hashlib.md5(data))
     
+    if not md5s:
+        return False
+    
     # if hash of first chunk matches etag and
     # etag does not list number of chunks
     if md5s[0].hexdigest() == etag and not num_parts:
