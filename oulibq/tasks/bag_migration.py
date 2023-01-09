@@ -175,7 +175,8 @@ def move_bag_nas(self, source_path, destination_path):
     task_id = str(self.request.id)
     log_path = "{0}.tmp".format(task_id)
     log = open(log_path, "w+")
-    status = call(['rsync', '-rltD', source_path, destination_path], stderr=log)
+    # the rsync must run with the same privilege level as the checks above - no sudo!
+    status = call(['rsync', '-rltD', source_path, destination_path], stderr=log)  
     if status != 0:
         log.seek(0)
         msg = log.read()
