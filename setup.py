@@ -5,7 +5,7 @@ setup(name='oulibq',
       version='0.1.20',
       packages= find_packages(),
       install_requires=[
-          'celery==3.1.22',
+          'celery==5.2.2',
           'pymongo==3.2.1',
           'requests==2.27.1',
           'boto3==1.17.112',
