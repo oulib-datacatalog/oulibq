@@ -171,7 +171,8 @@ def move_bag_nas(self, source_path, destination_path):
         raise BagAlreadyExists("The destination already exists! Try using a different destination")
 
     task_id = str(self.request.id)
-    log = open("{0}.tmp".format(task_id), "w+")
+    log_path = "{0}.tmp".format(task_id)
+    log = open(log_path, "w+")
     status = call(['rsync', '-rltD', source_path, destination_path], stderr=log)
     if status != 0:
         log.seek(0)
@@ -179,7 +180,8 @@ def move_bag_nas(self, source_path, destination_path):
         log.close()
         self.update_state(state=states.FAILURE, meta=msg)
         raise Ignore()
-    os.remove("{0}.tmp").format(task_id)  # log file
+    if os.path.exists(log_path):
+        os.remove(log_path)
     shutil.rmtree(source_path)
     logging.info("Moved NAS files from {0} to {1}".format(source_path, destination_path))
 
