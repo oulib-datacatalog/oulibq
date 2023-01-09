@@ -162,7 +162,9 @@ def move_bag_nas(self, source_path, destination_path):
         destination_path - location to move bag
     """
 
-    if not os.path.exists("{0}/bagit.txt".format(source_path)):
+    source_path = source_path if source_path.endswith("/") else source_path + "/"
+
+    if not os.path.exists("{0}bagit.txt".format(source_path)):
         logging.error("Attempted to move non-bag: {0}".format(source_path))
         raise NotABag("The source {0} is not a bag!".format(source_path))
 
