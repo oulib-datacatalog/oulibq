@@ -57,7 +57,7 @@ def copy_bag(self,bag_name,source_path,dest_path):
     task_id = str(copy_bag.request.id)
     log=open("{0}.tmp".format(task_id),"w+")
     #status=call(['rsync','-rltD','--delete',source,dest],stderr=log)
-    status=call(['sudo','rsync','-rltD',source,dest],stderr=log)
+    status=call(['rsync','-rltD',source,dest],stderr=log)
     if status != 0:
         log.seek(0)
         msg= log.read()
