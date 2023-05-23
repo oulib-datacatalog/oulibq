@@ -7,7 +7,7 @@ setup(name='oulibq',
       install_requires=[
           'celery==3.1.22',
           'pymongo==3.2.1',
-          'requests==2.27.1',
+          'requests==2.31.0',
           'boto3==1.17.112',
           'pandas',
           'bagit==1.8.1',
